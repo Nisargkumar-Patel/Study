@@ -1,0 +1,1316 @@
+================================================================================
+  SECURE TELEGRAM AI BOT SETUP GUIDE FOR DEBIAN
+  Complete Guide with Free/Open-Source AI APIs
+================================================================================
+
+TABLE OF CONTENTS
+=================
+1. Overview & Architecture
+2. Security Considerations (CRITICAL - READ FIRST!)
+3. Prerequisites & System Preparation
+4. Free AI API Options
+5. Step-by-Step Installation
+6. Telegram Bot Configuration
+7. Security Hardening
+8. Monitoring & Maintenance
+9. Troubleshooting
+10. Backup & Recovery
+
+================================================================================
+1. OVERVIEW & ARCHITECTURE
+================================================================================
+
+This guide will help you set up a secure AI-powered Telegram bot on Debian with:
+- Free/Open-Source AI APIs (no paid services required)
+- End-to-end security best practices
+- Systemd service for auto-restart
+- Firewall configuration
+- Encrypted storage for API keys
+- Rate limiting and access control
+
+ARCHITECTURE:
+┌─────────────────┐
+│   Telegram      │
+│   Servers       │
+└────────┬────────┘
+         │ (HTTPS - Encrypted)
+         │
+┌────────▼────────┐
+│   Your Debian   │
+│   Server        │
+│   ┌──────────┐  │
+│   │ Telegram │  │
+│   │   Bot    │  │
+│   └─────┬────┘  │
+│         │       │
+│   ┌─────▼────┐  │
+│   │ AI API   │  │
+│   │ Client   │  │
+│   └──────────┘  │
+└─────────────────┘
+
+================================================================================
+2. SECURITY CONSIDERATIONS (CRITICAL - READ FIRST!)
+================================================================================
+
+⚠️ CRITICAL SECURITY RULES:
+
+1. NEVER COMMIT API KEYS TO GIT
+   - Use .env files (add to .gitignore)
+   - Use environment variables
+   - Use encrypted secret management
+
+2. NEVER RUN AS ROOT
+   - Create dedicated user for the bot
+   - Use systemd with restricted permissions
+   - Apply principle of least privilege
+
+3. FIREWALL CONFIGURATION
+   - Only allow necessary outbound connections
+   - Block all inbound except SSH (and only from trusted IPs)
+   - Use fail2ban for SSH protection
+
+4. API KEY SECURITY
+   - Store in encrypted files or use secret management
+   - Rotate keys regularly
+   - Use separate keys for dev/prod
+
+5. NETWORK SECURITY
+   - Use HTTPS only
+   - Verify SSL certificates
+   - Use VPN or SSH tunnels for management
+
+6. ACCESS CONTROL
+   - Whitelist allowed Telegram user IDs
+   - Implement rate limiting
+   - Log all interactions
+
+7. DATA PRIVACY
+   - Don't log sensitive information
+   - Clear conversation history regularly
+   - Comply with data protection laws
+
+8. MONITORING
+   - Set up alerts for suspicious activity
+   - Monitor resource usage
+   - Regular security audits
+
+================================================================================
+3. PREREQUISITES & SYSTEM PREPARATION
+================================================================================
+
+A. System Requirements:
+   - Debian 11 (Bullseye) or newer
+   - Minimum 2GB RAM
+   - 10GB free disk space
+   - Stable internet connection
+
+B. Update System:
+sudo apt update && sudo apt upgrade -y
+sudo apt install -y \
+    python3 \
+    python3-pip \
+    python3-venv \
+    git \
+    ufw \
+    fail2ban \
+    htop \
+    curl \
+    wget \
+    gnupg \
+    ca-certificates
+
+C. Create Dedicated User (SECURITY):
+sudo adduser --system --group --home /opt/telegram-bot telegrambot
+sudo mkdir -p /opt/telegram-bot/{app,data,logs}
+sudo chown -R telegrambot:telegrambot /opt/telegram-bot
+
+D. Configure Firewall (UFW):
+# Deny all incoming by default
+sudo ufw default deny incoming
+sudo ufw default allow outgoing
+
+# Allow SSH (change 22 to your custom port if you use one)
+sudo ufw allow 22/tcp
+
+# Enable firewall
+sudo ufw enable
+
+# Check status
+sudo ufw status verbose
+
+E. Install Fail2Ban (SSH Protection):
+sudo apt install -y fail2ban
+sudo systemctl enable fail2ban
+sudo systemctl start fail2ban
+
+# Configure fail2ban
+sudo cp /etc/fail2ban/jail.conf /etc/fail2ban/jail.local
+
+# Edit jail.local to set:
+# bantime = 3600
+# maxretry = 3
+# findtime = 600
+
+sudo systemctl restart fail2ban
+
+================================================================================
+4. FREE AI API OPTIONS
+================================================================================
+
+OPTION 1: OLLAMA (Recommended - Completely Free, Run Locally)
+----------------------------------------------------------------
+Ollama runs AI models locally on your machine. No API keys needed!
+
+Models Available:
+- Llama 3.1 (8B, 70B)
+- Mistral (7B)
+- Phi-3 (3.8B, 14B)
+- Gemma (2B, 7B)
+- And many more!
+
+Pros:
+✓ Completely free
+✓ No API keys or limits
+✓ Full privacy (data never leaves your machine)
+✓ No internet required (after download)
+✓ Fast responses
+
+Cons:
+✗ Requires more system resources (4GB+ RAM for 7B models)
+✗ Initial model download required (3-10GB per model)
+
+Installation:
+curl -fsSL https://ollama.com/install.sh | sh
+
+Start Ollama:
+sudo systemctl enable ollama
+sudo systemctl start ollama
+
+Download a model:
+ollama pull llama3.1:8b
+# or
+ollama pull mistral:7b
+# or
+ollama pull phi3:3.8b  # Smallest, fastest
+
+Test it:
+curl http://localhost:11434/api/generate -d '{
+  "model": "llama3.1:8b",
+  "prompt": "Hello! How are you?",
+  "stream": false
+}'
+
+OPTION 2: GROQ API (Free Tier - Fast Cloud API)
+----------------------------------------------------------------
+Groq offers free API access to open-source models.
+
+Models Available:
+- Llama 3.1 (8B, 70B, 405B)
+- Mixtral 8x7B
+- Gemma 7B
+
+Limits (Free Tier):
+- 14,400 requests per day
+- 30 requests per minute
+
+Sign up: https://console.groq.com/
+Get API key from: https://console.groq.com/keys
+
+Pros:
+✓ Very fast inference
+✓ Generous free tier
+✓ No local resources needed
+✓ Multiple model options
+
+Cons:
+✗ Requires internet
+✗ Rate limits
+✗ Data sent to external service
+
+
+OPTION 3: HUGGING FACE INFERENCE API (Free)
+----------------------------------------------------------------
+Free inference API for thousands of models.
+
+Sign up: https://huggingface.co/
+Get token: https://huggingface.co/settings/tokens
+
+Models:
+- Mistral-7B-Instruct
+- Zephyr-7B-Beta
+- OpenAssistant models
+- And thousands more
+
+Pros:
+✓ Free
+✓ Many model options
+✓ Good community support
+
+Cons:
+✗ Slower than Groq
+✗ Rate limits on free tier
+✗ May have cold starts
+
+
+OPTION 4: LOCAL MODELS WITH LLAMA.CPP
+----------------------------------------------------------------
+Run quantized models efficiently on CPU.
+
+Installation:
+git clone https://github.com/ggerganov/llama.cpp
+cd llama.cpp
+make
+
+Download models from Hugging Face (GGUF format).
+
+Pros:
+✓ Completely free
+✓ Works on CPU
+✓ Very efficient
+
+Cons:
+✗ More technical setup
+✗ Manual model management
+
+
+RECOMMENDED CONFIGURATION FOR SECURITY & PRIVACY:
+==================================================
+For maximum security and privacy: Use OLLAMA (Option 1)
+- Data never leaves your machine
+- No API keys to protect
+- No rate limits or costs
+- Full control
+
+For faster responses with minimal setup: Use GROQ (Option 2)
+- Still free
+- Very fast
+- Easy to set up
+- Just need to secure API key
+
+================================================================================
+5. STEP-BY-STEP INSTALLATION (USING OLLAMA)
+================================================================================
+
+STEP 1: Install Ollama
+------------------------
+curl -fsSL https://ollama.com/install.sh | sh
+sudo systemctl enable ollama
+sudo systemctl start ollama
+
+# Verify installation
+ollama --version
+
+STEP 2: Download AI Model
+---------------------------
+# For systems with 8GB+ RAM:
+ollama pull llama3.1:8b
+
+# For systems with 4-6GB RAM:
+ollama pull phi3:3.8b
+
+# For systems with 16GB+ RAM:
+ollama pull llama3.1:70b
+
+# List installed models:
+ollama list
+
+STEP 3: Create Telegram Bot
+-----------------------------
+1. Open Telegram and search for @BotFather
+2. Send /newbot command
+3. Choose a name for your bot (e.g., "My AI Assistant")
+4. Choose a username (must end with 'bot', e.g., "myai_assistant_bot")
+5. BotFather will give you an API token like:
+   1234567890:ABCdefGHIjklMNOpqrsTUVwxyz-1234567890
+6. SAVE THIS TOKEN SECURELY (see Step 4)
+
+Optional Bot Configuration:
+- /setdescription - Set bot description
+- /setabouttext - Set about text
+- /setuserpic - Set bot profile picture
+- /setcommands - Set command list
+
+Recommended commands to set:
+/start - Start conversation
+/help - Get help
+/clear - Clear conversation history
+/model - Change AI model
+
+STEP 4: Secure API Key Storage
+--------------------------------
+# Switch to bot user
+sudo su - telegrambot
+
+# Create encrypted environment file
+cd /opt/telegram-bot
+
+# Install gnupg if not already installed (as root)
+exit
+sudo apt install -y gnupg
+sudo su - telegrambot
+
+# Create .env file with restricted permissions
+touch .env
+chmod 600 .env  # Only owner can read/write
+
+# Edit .env file
+nano .env
+
+# Add your configuration:
+TELEGRAM_BOT_TOKEN=your_bot_token_here
+OLLAMA_HOST=http://localhost:11434
+ALLOWED_USER_IDS=your_telegram_user_id,another_user_id
+LOG_LEVEL=INFO
+
+# Get your Telegram user ID by messaging @userinfobot on Telegram
+
+# Save and exit (Ctrl+X, Y, Enter)
+
+# Verify permissions
+ls -la .env
+# Should show: -rw------- 1 telegrambot telegrambot
+
+# Exit back to your regular user
+exit
+
+STEP 5: Create Python Bot Application
+---------------------------------------
+# Switch to bot user
+sudo su - telegrambot
+cd /opt/telegram-bot/app
+
+# Create virtual environment
+python3 -m venv venv
+source venv/bin/activate
+
+# Install dependencies
+pip install --upgrade pip
+pip install python-telegram-bot==20.7
+pip install requests python-dotenv
+
+# Create bot script
+nano telegram_ai_bot.py
+
+# Paste the following code:
+# ============================================================================
+#!/usr/bin/env python3
+"""
+Secure Telegram AI Bot with Ollama Integration
+"""
+
+import os
+import logging
+from typing import Optional
+from telegram import Update
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    MessageHandler,
+    filters,
+    ContextTypes,
+)
+import requests
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv('/opt/telegram-bot/.env')
+
+# Configuration
+TELEGRAM_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
+OLLAMA_HOST = os.getenv('OLLAMA_HOST', 'http://localhost:11434')
+ALLOWED_USERS = [int(uid) for uid in os.getenv('ALLOWED_USER_IDS', '').split(',') if uid]
+LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
+
+# Configure logging
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=getattr(logging, LOG_LEVEL),
+    handlers=[
+        logging.FileHandler('/opt/telegram-bot/logs/bot.log'),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
+
+# Store conversation history per user
+conversation_history = {}
+
+def is_authorized(user_id: int) -> bool:
+    """Check if user is authorized to use the bot"""
+    if not ALLOWED_USERS:
+        logger.warning("No allowed users configured - denying all access")
+        return False
+    return user_id in ALLOWED_USERS
+
+def call_ollama(prompt: str, model: str = "llama3.1:8b") -> Optional[str]:
+    """Call Ollama API for AI response"""
+    try:
+        response = requests.post(
+            f"{OLLAMA_HOST}/api/generate",
+            json={
+                "model": model,
+                "prompt": prompt,
+                "stream": False
+            },
+            timeout=60
+        )
+        response.raise_for_status()
+        return response.json().get('response', 'No response generated')
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Ollama API error: {e}")
+        return None
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /start command"""
+    user_id = update.effective_user.id
+
+    if not is_authorized(user_id):
+        await update.message.reply_text(
+            "⛔ Unauthorized. This bot is private."
+        )
+        logger.warning(f"Unauthorized access attempt by user {user_id}")
+        return
+
+    await update.message.reply_text(
+        "🤖 Hello! I'm your secure AI assistant powered by Ollama.\n\n"
+        "Commands:\n"
+        "/start - Start conversation\n"
+        "/help - Show this help\n"
+        "/clear - Clear conversation history\n"
+        "/model - Check current model\n\n"
+        "Just send me a message and I'll respond!"
+    )
+
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /help command"""
+    user_id = update.effective_user.id
+
+    if not is_authorized(user_id):
+        return
+
+    await update.message.reply_text(
+        "🤖 AI Assistant Help\n\n"
+        "Commands:\n"
+        "/start - Start conversation\n"
+        "/help - Show this help\n"
+        "/clear - Clear conversation history\n"
+        "/model - Check current model\n\n"
+        "Features:\n"
+        "✅ Powered by local Ollama (privacy-first)\n"
+        "✅ Conversation history maintained\n"
+        "✅ Secure access control\n"
+        "✅ No data sent to external servers\n\n"
+        "Just send any message and I'll respond!"
+    )
+
+async def clear_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /clear command"""
+    user_id = update.effective_user.id
+
+    if not is_authorized(user_id):
+        return
+
+    if user_id in conversation_history:
+        del conversation_history[user_id]
+
+    await update.message.reply_text("✅ Conversation history cleared!")
+
+async def model_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /model command"""
+    user_id = update.effective_user.id
+
+    if not is_authorized(user_id):
+        return
+
+    try:
+        # Get list of available models
+        response = requests.get(f"{OLLAMA_HOST}/api/tags", timeout=10)
+        response.raise_for_status()
+        models = response.json().get('models', [])
+
+        model_list = "\n".join([f"- {m['name']}" for m in models])
+
+        await update.message.reply_text(
+            f"🤖 Current Model: llama3.1:8b\n\n"
+            f"Available Models:\n{model_list}"
+        )
+    except Exception as e:
+        logger.error(f"Error getting model info: {e}")
+        await update.message.reply_text("❌ Error getting model information")
+
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle incoming messages"""
+    user_id = update.effective_user.id
+    user_message = update.message.text
+
+    # Security check
+    if not is_authorized(user_id):
+        await update.message.reply_text("⛔ Unauthorized access")
+        logger.warning(f"Unauthorized message from user {user_id}")
+        return
+
+    # Log interaction (without sensitive content)
+    logger.info(f"Message from authorized user {user_id}")
+
+    # Show typing indicator
+    await update.message.chat.send_action(action="typing")
+
+    # Get or initialize conversation history
+    if user_id not in conversation_history:
+        conversation_history[user_id] = []
+
+    # Add user message to history
+    conversation_history[user_id].append(f"User: {user_message}")
+
+    # Keep only last 10 messages for context
+    if len(conversation_history[user_id]) > 10:
+        conversation_history[user_id] = conversation_history[user_id][-10:]
+
+    # Build context from history
+    context_prompt = "\n".join(conversation_history[user_id])
+    full_prompt = f"{context_prompt}\nAssistant:"
+
+    # Get AI response
+    ai_response = call_ollama(full_prompt)
+
+    if ai_response:
+        # Add assistant response to history
+        conversation_history[user_id].append(f"Assistant: {ai_response}")
+        await update.message.reply_text(ai_response)
+    else:
+        await update.message.reply_text(
+            "❌ Sorry, I encountered an error. Please try again."
+        )
+
+def main():
+    """Start the bot"""
+    if not TELEGRAM_TOKEN:
+        logger.error("TELEGRAM_BOT_TOKEN not set!")
+        return
+
+    if not ALLOWED_USERS:
+        logger.error("ALLOWED_USER_IDS not set! Bot will deny all access.")
+        return
+
+    logger.info("Starting Telegram AI Bot...")
+    logger.info(f"Allowed users: {ALLOWED_USERS}")
+
+    # Create application
+    application = Application.builder().token(TELEGRAM_TOKEN).build()
+
+    # Register handlers
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(CommandHandler("clear", clear_history))
+    application.add_handler(CommandHandler("model", model_info))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+
+    # Start bot
+    logger.info("Bot is running...")
+    application.run_polling(allowed_updates=Update.ALL_TYPES)
+
+if __name__ == '__main__':
+    main()
+# ============================================================================
+
+# Save and exit (Ctrl+X, Y, Enter)
+
+# Make executable
+chmod +x telegram_ai_bot.py
+
+# Exit bot user
+exit
+
+STEP 6: Create Systemd Service (Auto-Start)
+---------------------------------------------
+# Create service file (as root)
+sudo nano /etc/systemd/system/telegram-bot.service
+
+# Paste the following:
+[Unit]
+Description=Telegram AI Bot with Ollama
+After=network.target ollama.service
+Wants=ollama.service
+
+[Service]
+Type=simple
+User=telegrambot
+Group=telegrambot
+WorkingDirectory=/opt/telegram-bot/app
+Environment="PATH=/opt/telegram-bot/app/venv/bin:/usr/bin"
+ExecStart=/opt/telegram-bot/app/venv/bin/python /opt/telegram-bot/app/telegram_ai_bot.py
+Restart=always
+RestartSec=10
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/telegram-bot/logs /opt/telegram-bot/data
+
+# Resource limits
+MemoryLimit=1G
+CPUQuota=80%
+
+[Install]
+WantedBy=multi-user.target
+
+# Save and exit
+
+# Reload systemd
+sudo systemctl daemon-reload
+
+# Enable service (start on boot)
+sudo systemctl enable telegram-bot.service
+
+# Start service
+sudo systemctl start telegram-bot.service
+
+# Check status
+sudo systemctl status telegram-bot.service
+
+# View logs
+sudo journalctl -u telegram-bot.service -f
+
+STEP 7: Test Your Bot
+-----------------------
+1. Open Telegram
+2. Search for your bot by username
+3. Send /start command
+4. You should get a welcome message
+5. Send a test message like "Hello! Can you help me?"
+6. Bot should respond with AI-generated text
+
+If you get "Unauthorized" message:
+- Make sure you added your Telegram user ID to ALLOWED_USER_IDS in .env
+- Get your ID from @userinfobot
+- Update .env file
+- Restart service: sudo systemctl restart telegram-bot.service
+
+================================================================================
+6. TELEGRAM BOT CONFIGURATION
+================================================================================
+
+A. Get Your Telegram User ID:
+   1. Open Telegram
+   2. Search for @userinfobot
+   3. Start conversation
+   4. Bot will send you your user ID
+   5. Add this to ALLOWED_USER_IDS in .env
+
+B. Configure Bot Settings with BotFather:
+   Search @BotFather in Telegram and use these commands:
+
+   Set commands list:
+   /setcommands
+   Choose your bot
+   Paste:
+start - Start conversation
+help - Get help
+clear - Clear conversation history
+model - Check current model
+
+   Set description:
+   /setdescription
+   Choose your bot
+   Paste: "Your personal AI assistant powered by open-source AI. Privacy-first, running locally."
+
+   Set about text:
+   /setabouttext
+   Choose your bot
+   Paste: "Secure AI assistant using Ollama for local, private AI conversations."
+
+C. Add Multiple Authorized Users:
+   Edit /opt/telegram-bot/.env as telegrambot user:
+   ALLOWED_USER_IDS=123456789,987654321,555444333
+
+D. Bot Privacy Settings:
+   /setprivacy (with @BotFather)
+   Choose your bot
+   Select "Disable" - Bot will only see messages sent directly to it
+
+================================================================================
+7. SECURITY HARDENING
+================================================================================
+
+A. File Permissions Audit:
+sudo chown -R telegrambot:telegrambot /opt/telegram-bot
+sudo chmod 700 /opt/telegram-bot
+sudo chmod 600 /opt/telegram-bot/.env
+sudo chmod 755 /opt/telegram-bot/app
+sudo chmod 700 /opt/telegram-bot/logs
+
+B. AppArmor Profile (Advanced):
+sudo apt install -y apparmor-utils
+
+# Create profile
+sudo aa-genprof /opt/telegram-bot/app/venv/bin/python
+
+# Follow prompts and allow necessary access
+
+C. Automated Backups:
+# Create backup script
+sudo nano /opt/telegram-bot/backup.sh
+
+#!/bin/bash
+BACKUP_DIR="/opt/telegram-bot/backups"
+DATE=$(date +%Y%m%d_%H%M%S)
+
+mkdir -p $BACKUP_DIR
+
+# Backup configuration (encrypted)
+tar -czf $BACKUP_DIR/config_$DATE.tar.gz /opt/telegram-bot/.env
+gpg --symmetric --cipher-algo AES256 $BACKUP_DIR/config_$DATE.tar.gz
+rm $BACKUP_DIR/config_$DATE.tar.gz
+
+# Backup logs
+tar -czf $BACKUP_DIR/logs_$DATE.tar.gz /opt/telegram-bot/logs/
+
+# Keep only last 7 backups
+find $BACKUP_DIR -name "*.tar.gz*" -mtime +7 -delete
+
+# Make executable
+sudo chmod +x /opt/telegram-bot/backup.sh
+
+# Add to cron (daily at 2 AM)
+sudo crontab -e
+# Add line:
+0 2 * * * /opt/telegram-bot/backup.sh
+
+D. Log Rotation:
+sudo nano /etc/logrotate.d/telegram-bot
+
+/opt/telegram-bot/logs/*.log {
+    daily
+    rotate 7
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0640 telegrambot telegrambot
+}
+
+E. Rate Limiting (Add to bot code):
+# Add at top of telegram_ai_bot.py after imports:
+from functools import wraps
+from time import time
+
+# Rate limiting decorator
+user_last_request = {}
+RATE_LIMIT_SECONDS = 3  # 3 seconds between requests
+
+def rate_limit(func):
+    @wraps(func)
+    async def wrapper(update, context):
+        user_id = update.effective_user.id
+        current_time = time()
+
+        if user_id in user_last_request:
+            time_since_last = current_time - user_last_request[user_id]
+            if time_since_last < RATE_LIMIT_SECONDS:
+                await update.message.reply_text(
+                    f"⏳ Please wait {RATE_LIMIT_SECONDS - int(time_since_last)} seconds"
+                )
+                return
+
+        user_last_request[user_id] = current_time
+        return await func(update, context)
+
+    return wrapper
+
+# Then add @rate_limit decorator to handle_message function:
+@rate_limit
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # ... rest of function
+
+F. Monitoring Setup:
+# Install monitoring tools
+sudo apt install -y monit
+
+# Configure monit
+sudo nano /etc/monit/conf.d/telegram-bot
+
+check process telegram-bot matching "telegram_ai_bot.py"
+    start program = "/bin/systemctl start telegram-bot.service"
+    stop program = "/bin/systemctl stop telegram-bot.service"
+    if cpu > 80% for 3 cycles then alert
+    if memory > 80% for 3 cycles then alert
+    if failed host 127.0.0.1 port 11434 protocol http for 3 cycles then restart
+
+# Enable monit
+sudo systemctl enable monit
+sudo systemctl start monit
+
+G. SSH Hardening Checklist:
+□ Change default SSH port
+□ Disable root login (PermitRootLogin no)
+□ Use SSH keys instead of passwords
+□ Enable 2FA for SSH (Google Authenticator)
+□ Set up fail2ban (already done in step 3)
+□ Only allow specific IPs (if possible)
+
+Edit SSH config:
+sudo nano /etc/ssh/sshd_config
+
+PermitRootLogin no
+PasswordAuthentication no
+PubkeyAuthentication yes
+Port 2222  # Change from default 22
+AllowUsers your_username
+
+Restart SSH:
+sudo systemctl restart sshd
+
+Update firewall:
+sudo ufw delete allow 22/tcp
+sudo ufw allow 2222/tcp
+
+H. Regular Security Updates:
+# Create update script
+sudo nano /usr/local/bin/security-updates.sh
+
+#!/bin/bash
+apt update
+apt upgrade -y
+apt autoremove -y
+apt autoclean
+
+# Add to cron (weekly on Sunday at 3 AM)
+sudo crontab -e
+# Add:
+0 3 * * 0 /usr/local/bin/security-updates.sh
+
+I. Security Checklist:
+□ API keys stored in .env with 600 permissions
+□ Bot running as non-root user (telegrambot)
+□ Firewall enabled (UFW)
+□ Fail2ban configured
+□ Only authorized user IDs can use bot
+□ Rate limiting enabled
+□ Logs monitored
+□ Automated backups configured
+□ SSH hardened
+□ System updates automated
+□ AppArmor or SELinux enabled
+
+================================================================================
+8. MONITORING & MAINTENANCE
+================================================================================
+
+A. Check Bot Status:
+sudo systemctl status telegram-bot.service
+
+B. View Real-time Logs:
+sudo journalctl -u telegram-bot.service -f
+
+C. Check Ollama Status:
+sudo systemctl status ollama
+ollama list  # List installed models
+
+D. Monitor System Resources:
+htop
+# or
+top
+
+E. Check Disk Space:
+df -h
+
+F. View Bot Logs:
+sudo tail -f /opt/telegram-bot/logs/bot.log
+
+G. Test Ollama Directly:
+curl http://localhost:11434/api/generate -d '{
+  "model": "llama3.1:8b",
+  "prompt": "Say hello!",
+  "stream": false
+}'
+
+H. Check Network Connectivity:
+# Test internet connection
+ping -c 3 google.com
+
+# Test Telegram API
+curl -s https://api.telegram.org/bot<YOUR_TOKEN>/getMe
+
+I. Database of Commands:
+# Restart bot
+sudo systemctl restart telegram-bot.service
+
+# Stop bot
+sudo systemctl stop telegram-bot.service
+
+# Start bot
+sudo systemctl start telegram-bot.service
+
+# Disable bot (prevent auto-start)
+sudo systemctl disable telegram-bot.service
+
+# Enable bot (auto-start on boot)
+sudo systemctl enable telegram-bot.service
+
+# View systemd logs
+sudo journalctl -u telegram-bot.service -n 100
+
+# Clear systemd logs (if too large)
+sudo journalctl --vacuum-time=7d
+
+J. Weekly Maintenance Checklist:
+□ Check bot is running: systemctl status telegram-bot
+□ Review logs for errors: journalctl -u telegram-bot.service
+□ Check disk space: df -h
+□ Verify backups exist: ls -lh /opt/telegram-bot/backups/
+□ Update Ollama models: ollama pull llama3.1:8b
+□ Check system updates: apt list --upgradable
+□ Review fail2ban bans: sudo fail2ban-client status sshd
+
+================================================================================
+9. TROUBLESHOOTING
+================================================================================
+
+PROBLEM: Bot doesn't respond
+SOLUTION:
+1. Check if bot service is running:
+   sudo systemctl status telegram-bot.service
+2. If not running, start it:
+   sudo systemctl start telegram-bot.service
+3. Check logs for errors:
+   sudo journalctl -u telegram-bot.service -n 50
+4. Verify Ollama is running:
+   sudo systemctl status ollama
+5. Test Ollama manually:
+   curl http://localhost:11434/api/generate -d '{"model":"llama3.1:8b","prompt":"test","stream":false}'
+
+PROBLEM: "Unauthorized" message
+SOLUTION:
+1. Get your Telegram user ID from @userinfobot
+2. Add to .env file:
+   sudo su - telegrambot
+   nano /opt/telegram-bot/.env
+   # Update ALLOWED_USER_IDS with your ID
+3. Restart bot:
+   exit
+   sudo systemctl restart telegram-bot.service
+
+PROBLEM: Slow responses
+SOLUTION:
+1. Check if model is appropriate for your RAM:
+   ollama list
+2. Switch to smaller model:
+   ollama pull phi3:3.8b
+3. Update bot code to use smaller model
+4. Check system resources:
+   htop
+
+PROBLEM: Model not found error
+SOLUTION:
+1. List installed models:
+   ollama list
+2. Pull the model:
+   ollama pull llama3.1:8b
+3. Restart bot:
+   sudo systemctl restart telegram-bot.service
+
+PROBLEM: Out of memory
+SOLUTION:
+1. Switch to smaller model (phi3:3.8b instead of llama3.1:8b)
+2. Increase swap space:
+   sudo fallocate -l 4G /swapfile
+   sudo chmod 600 /swapfile
+   sudo mkswap /swapfile
+   sudo swapon /swapfile
+3. Add to /etc/fstab for persistence:
+   /swapfile none swap sw 0 0
+
+PROBLEM: Network errors
+SOLUTION:
+1. Check internet connection:
+   ping -c 3 telegram.org
+2. Check firewall:
+   sudo ufw status
+3. Verify outbound HTTPS is allowed:
+   curl -I https://api.telegram.org
+4. Check DNS:
+   nslookup telegram.org
+
+PROBLEM: Bot stops after system reboot
+SOLUTION:
+1. Enable auto-start:
+   sudo systemctl enable telegram-bot.service
+2. Check dependencies:
+   sudo systemctl enable ollama.service
+3. Verify service started:
+   sudo systemctl status telegram-bot.service
+
+PROBLEM: Permission denied errors
+SOLUTION:
+1. Fix ownership:
+   sudo chown -R telegrambot:telegrambot /opt/telegram-bot
+2. Fix permissions:
+   sudo chmod 700 /opt/telegram-bot
+   sudo chmod 600 /opt/telegram-bot/.env
+3. Restart service:
+   sudo systemctl restart telegram-bot.service
+
+PROBLEM: API token invalid
+SOLUTION:
+1. Get new token from @BotFather:
+   /newbot or /token
+2. Update .env file:
+   sudo su - telegrambot
+   nano /opt/telegram-bot/.env
+3. Restart bot:
+   exit
+   sudo systemctl restart telegram-bot.service
+
+PROBLEM: Logs filling up disk
+SOLUTION:
+1. Configure log rotation (see section 7D)
+2. Clear old logs:
+   sudo journalctl --vacuum-time=7d
+3. Compress old log files:
+   cd /opt/telegram-bot/logs
+   gzip *.log.1 *.log.2
+
+================================================================================
+10. BACKUP & RECOVERY
+================================================================================
+
+A. What to Backup:
+1. Configuration files (.env)
+2. Bot code (telegram_ai_bot.py)
+3. Logs (optional, for audit trail)
+4. Systemd service file
+
+B. Manual Backup:
+# Create backup directory
+mkdir -p ~/telegram-bot-backup
+
+# Backup configuration (encrypted)
+sudo cp /opt/telegram-bot/.env ~/telegram-bot-backup/
+gpg --symmetric --cipher-algo AES256 ~/telegram-bot-backup/.env
+rm ~/telegram-bot-backup/.env
+
+# Backup bot code
+sudo cp /opt/telegram-bot/app/telegram_ai_bot.py ~/telegram-bot-backup/
+
+# Backup service file
+sudo cp /etc/systemd/system/telegram-bot.service ~/telegram-bot-backup/
+
+# Create tarball
+tar -czf telegram-bot-backup-$(date +%Y%m%d).tar.gz ~/telegram-bot-backup/
+
+# Store securely (off-system)
+
+C. Automated Backup (see section 7C):
+Backups run daily at 2 AM, encrypted with GPG
+
+D. Restore from Backup:
+# Extract backup
+tar -xzf telegram-bot-backup-YYYYMMDD.tar.gz
+
+# Decrypt configuration
+gpg -d config_YYYYMMDD_HHMMSS.tar.gz.gpg > config.tar.gz
+tar -xzf config.tar.gz
+
+# Restore files
+sudo cp telegram-bot-backup/.env /opt/telegram-bot/
+sudo cp telegram-bot-backup/telegram_ai_bot.py /opt/telegram-bot/app/
+sudo cp telegram-bot-backup/telegram-bot.service /etc/systemd/system/
+
+# Fix permissions
+sudo chown -R telegrambot:telegrambot /opt/telegram-bot
+sudo chmod 600 /opt/telegram-bot/.env
+
+# Reload and restart
+sudo systemctl daemon-reload
+sudo systemctl restart telegram-bot.service
+
+E. Disaster Recovery Plan:
+1. Keep backups on separate device/cloud
+2. Document recovery procedure
+3. Test restore process regularly
+4. Keep list of installed packages:
+   dpkg --get-selections > package-list.txt
+5. Store Ollama model names (models can be re-downloaded)
+
+F. Migration to New Server:
+1. Install Ollama on new server
+2. Download models: ollama pull llama3.1:8b
+3. Restore backup files
+4. Install Python dependencies
+5. Configure systemd service
+6. Test thoroughly before switching
+
+================================================================================
+ADVANCED: ALTERNATIVE AI API OPTIONS
+================================================================================
+
+If you want to use GROQ instead of Ollama:
+-------------------------------------------
+
+1. Sign up at https://console.groq.com/
+2. Get API key from https://console.groq.com/keys
+3. Add to .env:
+   GROQ_API_KEY=your_key_here
+4. Install groq library:
+   pip install groq
+5. Modify call_ollama function to call_groq:
+
+def call_groq(prompt: str) -> Optional[str]:
+    """Call Groq API"""
+    try:
+        from groq import Groq
+        client = Groq(api_key=os.getenv('GROQ_API_KEY'))
+
+        response = client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.7,
+            max_tokens=1024,
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        logger.error(f"Groq API error: {e}")
+        return None
+
+If you want to use Hugging Face:
+---------------------------------
+
+1. Sign up at https://huggingface.co/
+2. Get token: https://huggingface.co/settings/tokens
+3. Add to .env:
+   HF_API_TOKEN=your_token_here
+4. Modify bot code to use Hugging Face Inference API
+
+def call_huggingface(prompt: str) -> Optional[str]:
+    """Call Hugging Face Inference API"""
+    API_URL = "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.2"
+    headers = {"Authorization": f"Bearer {os.getenv('HF_API_TOKEN')}"}
+
+    try:
+        response = requests.post(
+            API_URL,
+            headers=headers,
+            json={"inputs": prompt},
+            timeout=30
+        )
+        response.raise_for_status()
+        return response.json()[0]['generated_text']
+    except Exception as e:
+        logger.error(f"HF API error: {e}")
+        return None
+
+================================================================================
+SECURITY AUDIT CHECKLIST
+================================================================================
+
+Perform this audit monthly:
+
+□ System Updates:
+  □ apt update && apt upgrade
+  □ Check for security advisories
+
+□ User Access:
+  □ Review authorized Telegram user IDs
+  □ Remove users who should no longer have access
+  □ Check for unauthorized system users: cat /etc/passwd
+
+□ File Permissions:
+  □ ls -la /opt/telegram-bot/.env (should be 600)
+  □ ls -la /opt/telegram-bot (should be 700)
+  □ Check for world-readable sensitive files
+
+□ Logs Review:
+  □ Check bot logs for suspicious activity
+  □ Review fail2ban logs: sudo fail2ban-client status sshd
+  □ Check auth logs: sudo tail -100 /var/log/auth.log
+  □ Review systemd journal for errors
+
+□ Network Security:
+  □ Verify firewall rules: sudo ufw status numbered
+  □ Check for listening ports: sudo netstat -tulpn
+  □ Verify no unexpected services running: systemctl list-units --type=service
+
+□ Backups:
+  □ Verify backups are running
+  □ Test restore procedure
+  □ Check backup encryption
+  □ Verify off-site backup storage
+
+□ Resource Usage:
+  □ Check disk space: df -h
+  □ Review memory usage: free -h
+  □ Check for resource exhaustion attacks
+
+□ API Security:
+  □ Rotate API keys if compromised
+  □ Verify rate limiting is working
+  □ Check for API abuse in logs
+
+□ Documentation:
+  □ Update this document with changes
+  □ Document any incidents
+  □ Keep recovery procedures current
+
+================================================================================
+IMPORTANT REMINDERS
+================================================================================
+
+1. NEVER commit .env file to git
+2. NEVER share your Telegram bot token
+3. NEVER run the bot as root
+4. ALWAYS use ALLOWED_USER_IDS to restrict access
+5. ALWAYS keep backups encrypted
+6. ALWAYS monitor logs regularly
+7. ALWAYS apply security updates promptly
+8. ALWAYS use strong, unique passwords
+9. ALWAYS enable firewall
+10. ALWAYS test before production use
+
+================================================================================
+SUPPORT & RESOURCES
+================================================================================
+
+Ollama Documentation:
+https://github.com/ollama/ollama
+
+Python Telegram Bot Documentation:
+https://docs.python-telegram-bot.org/
+
+Telegram Bot API:
+https://core.telegram.org/bots/api
+
+Debian Security:
+https://www.debian.org/security/
+
+Fail2Ban:
+https://www.fail2ban.org/
+
+UFW Guide:
+https://help.ubuntu.com/community/UFW
+
+================================================================================
+FINAL NOTES
+================================================================================
+
+This setup provides:
+✓ Complete privacy (Ollama runs locally)
+✓ No costs (all free software)
+✓ Strong security (multi-layered approach)
+✓ Easy maintenance (systemd service)
+✓ Automatic recovery (systemd restarts)
+✓ Audit trail (comprehensive logging)
+✓ Access control (whitelist-based)
+✓ Rate limiting (prevents abuse)
+✓ Backup & recovery (automated backups)
+
+Remember: Security is a process, not a product. Regular monitoring and updates
+are essential to maintaining a secure system.
+
+Good luck with your secure Telegram AI bot!
+
+================================================================================
+END OF GUIDE
+================================================================================
