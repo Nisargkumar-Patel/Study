@@ -1,0 +1,1391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>12-Month Career Plan | Firmware + Embedded + Cloud</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #242836;
+    --border: #2e3345;
+    --text: #e2e4eb;
+    --text-muted: #8b8fa3;
+    --accent: #6c63ff;
+    --accent2: #00d4aa;
+    --accent3: #ff6b6b;
+    --accent4: #ffd93d;
+    --gradient1: linear-gradient(135deg, #6c63ff, #00d4aa);
+    --gradient2: linear-gradient(135deg, #ff6b6b, #ffd93d);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    scroll-behavior: smooth;
+  }
+
+  ::-webkit-scrollbar { width: 8px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
+  nav {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 100;
+    background: rgba(15, 17, 23, 0.9);
+    backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--border);
+    padding: 0 2rem;
+  }
+
+  .nav-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 64px;
+  }
+
+  .nav-logo {
+    font-weight: 700;
+    font-size: 1.1rem;
+    background: var(--gradient1);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .nav-links { display: flex; gap: 0.5rem; list-style: none; flex-wrap: wrap; }
+
+  .nav-links a {
+    color: var(--text-muted);
+    text-decoration: none;
+    padding: 0.4rem 0.8rem;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    transition: all 0.2s;
+  }
+
+  .nav-links a:hover { color: var(--text); background: var(--surface2); }
+
+  .hamburger {
+    display: none;
+    background: none;
+    border: none;
+    color: var(--text);
+    font-size: 1.5rem;
+    cursor: pointer;
+  }
+
+  .hero {
+    padding: 8rem 2rem 4rem;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .hero::before {
+    content: '';
+    position: absolute;
+    top: -50%; left: -50%;
+    width: 200%; height: 200%;
+    background: radial-gradient(ellipse at 30% 50%, rgba(108,99,255,0.08) 0%, transparent 50%),
+                radial-gradient(ellipse at 70% 50%, rgba(0,212,170,0.06) 0%, transparent 50%);
+    animation: pulse 8s ease-in-out infinite alternate;
+  }
+
+  @keyframes pulse {
+    0% { opacity: 0.5; transform: scale(1); }
+    100% { opacity: 1; transform: scale(1.1); }
+  }
+
+  .hero-content { position: relative; z-index: 1; max-width: 800px; margin: 0 auto; }
+
+  .hero h1 {
+    font-size: 3rem;
+    font-weight: 800;
+    line-height: 1.2;
+    margin-bottom: 1rem;
+    background: var(--gradient1);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .hero p {
+    font-size: 1.2rem;
+    color: var(--text-muted);
+    max-width: 600px;
+    margin: 0 auto 2rem;
+  }
+
+  .hero-tags { display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap; }
+
+  .tag {
+    padding: 0.4rem 1rem;
+    border-radius: 50px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    border: 1px solid;
+  }
+
+  .tag-fw { border-color: var(--accent); color: var(--accent); background: rgba(108,99,255,0.1); }
+  .tag-emb { border-color: var(--accent2); color: var(--accent2); background: rgba(0,212,170,0.1); }
+  .tag-cloud { border-color: var(--accent4); color: var(--accent4); background: rgba(255,217,61,0.1); }
+
+  main { max-width: 1200px; margin: 0 auto; padding: 0 2rem 4rem; }
+
+  .phase-header {
+    margin: 4rem 0 2rem;
+    padding: 2rem;
+    border-radius: 16px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .phase-header::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 16px;
+    padding: 2px;
+    background: var(--gradient1);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+  }
+
+  .phase-header.phase-2::before { background: linear-gradient(135deg, #00d4aa, #6c63ff); }
+  .phase-header.phase-3::before { background: linear-gradient(135deg, #ffd93d, #ff6b6b); }
+  .phase-header.phase-4::before { background: linear-gradient(135deg, #ff6b6b, #6c63ff); }
+
+  .phase-number {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 3px;
+    color: var(--accent);
+    margin-bottom: 0.5rem;
+  }
+
+  .phase-header h2 { font-size: 2rem; font-weight: 700; margin-bottom: 0.5rem; }
+  .phase-header p { color: var(--text-muted); }
+
+  .month {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    margin-bottom: 1.5rem;
+    overflow: hidden;
+  }
+
+  .month-header {
+    padding: 1.25rem 1.5rem;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: background 0.2s;
+    user-select: none;
+  }
+
+  .month-header:hover { background: var(--surface2); }
+  .month-title { font-size: 1.2rem; font-weight: 600; }
+
+  .month-chevron {
+    font-size: 1.2rem;
+    color: var(--text-muted);
+    transition: transform 0.3s;
+  }
+
+  .month.open .month-chevron { transform: rotate(180deg); }
+
+  .month-body {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.4s ease;
+  }
+
+  .month.open .month-body { max-height: 5000px; }
+  .month-content { padding: 0 1.5rem 1.5rem; }
+
+  .week { margin-bottom: 1.5rem; }
+
+  .week h4 {
+    color: var(--accent2);
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .week ul { list-style: none; padding-left: 0; }
+
+  .week li {
+    padding: 0.3rem 0 0.3rem 1.5rem;
+    position: relative;
+    color: var(--text);
+    font-size: 0.95rem;
+  }
+
+  .week li::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0.75rem;
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+
+  .sub-list { margin-top: 0.25rem; padding-left: 1rem; }
+
+  .sub-list li::before {
+    width: 4px; height: 4px;
+    background: var(--text-muted);
+  }
+
+  .project-box {
+    background: var(--surface2);
+    border-left: 3px solid var(--accent2);
+    padding: 1rem 1.25rem;
+    border-radius: 0 8px 8px 0;
+    margin: 0.75rem 0;
+  }
+
+  .project-box h5 {
+    color: var(--accent2);
+    font-size: 0.9rem;
+    margin-bottom: 0.5rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  .milestone {
+    background: rgba(108,99,255,0.1);
+    border: 1px solid rgba(108,99,255,0.3);
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    margin-top: 1rem;
+    font-weight: 600;
+    color: var(--accent);
+  }
+
+  .capstone {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 2rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .capstone h3 {
+    font-size: 1.4rem;
+    margin-bottom: 1.5rem;
+    background: var(--gradient2);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .capstone-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.25rem;
+  }
+
+  .capstone-card {
+    background: var(--surface2);
+    border-radius: 10px;
+    padding: 1.25rem;
+    border: 1px solid var(--border);
+  }
+
+  .capstone-card h4 {
+    color: var(--accent4);
+    font-size: 0.95rem;
+    margin-bottom: 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .capstone-card ul { list-style: none; padding: 0; }
+
+  .capstone-card li {
+    padding: 0.25rem 0;
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    padding-left: 1rem;
+    position: relative;
+  }
+
+  .capstone-card li::before {
+    content: '>';
+    position: absolute;
+    left: 0;
+    color: var(--accent2);
+    font-weight: bold;
+  }
+
+  .table-wrapper {
+    overflow-x: auto;
+    margin: 1.5rem 0;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+  }
+
+  table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+
+  th {
+    background: var(--surface2);
+    padding: 0.75rem 1.25rem;
+    text-align: left;
+    font-weight: 600;
+    color: var(--accent);
+    white-space: nowrap;
+  }
+
+  td {
+    padding: 0.75rem 1.25rem;
+    border-top: 1px solid var(--border);
+    color: var(--text-muted);
+  }
+
+  tr:hover td { background: rgba(108,99,255,0.05); }
+
+  .schedule-row { display: flex; align-items: stretch; margin-bottom: 0.5rem; }
+
+  .schedule-time {
+    min-width: 140px;
+    background: var(--surface2);
+    padding: 0.6rem 1rem;
+    border-radius: 8px 0 0 8px;
+    font-family: monospace;
+    font-size: 0.85rem;
+    color: var(--accent);
+    display: flex;
+    align-items: center;
+  }
+
+  .schedule-activity {
+    flex: 1;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: none;
+    padding: 0.6rem 1rem;
+    border-radius: 0 8px 8px 0;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+  }
+
+  .resource-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1.25rem;
+    margin-top: 1.5rem;
+  }
+
+  .resource-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem;
+  }
+
+  .resource-card h3 { font-size: 1.1rem; margin-bottom: 1rem; color: var(--accent4); }
+  .resource-card li { padding: 0.3rem 0; font-size: 0.9rem; color: var(--text-muted); }
+  .resource-card strong { color: var(--text); }
+
+  .interview-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+    gap: 1.25rem;
+  }
+
+  .interview-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem;
+  }
+
+  .interview-card h4 { font-size: 1rem; margin-bottom: 1rem; color: var(--accent3); }
+  .interview-card li { padding: 0.2rem 0; font-size: 0.9rem; color: var(--text-muted); }
+
+  .tip-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1rem;
+    margin-top: 1.5rem;
+  }
+
+  .tip {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.25rem;
+  }
+
+  .tip-number {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    background: var(--gradient1);
+    color: #fff;
+    font-size: 0.8rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+  }
+
+  .tip p { font-size: 0.9rem; color: var(--text-muted); }
+  .tip strong { color: var(--text); }
+
+  .company-section { margin-bottom: 1.5rem; }
+  .company-section h4 { color: var(--accent2); font-size: 1rem; margin-bottom: 0.5rem; }
+  .company-tiers { padding-left: 0; list-style: none; }
+  .company-tiers li { padding: 0.3rem 0; font-size: 0.9rem; color: var(--text-muted); }
+  .company-tiers .tier-label { color: var(--accent); font-weight: 600; margin-right: 0.25rem; }
+
+  .hw-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 0.75rem;
+    margin: 1rem 0;
+  }
+
+  .hw-item {
+    background: var(--surface2);
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.9rem;
+  }
+
+  .hw-price { color: var(--accent2); font-weight: 600; font-family: monospace; }
+
+  .progress-bar { display: flex; gap: 4px; margin: 2rem 0; }
+
+  .progress-segment {
+    flex: 1;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--border);
+    position: relative;
+    cursor: pointer;
+  }
+
+  .progress-segment.active { background: var(--accent); }
+  .progress-segment:nth-child(n+4).active { background: var(--accent2); }
+  .progress-segment:nth-child(n+7).active { background: var(--accent4); }
+  .progress-segment:nth-child(n+10).active { background: var(--accent3); }
+
+  .progress-label {
+    position: absolute;
+    bottom: 12px; left: 0;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+
+  footer {
+    text-align: center;
+    padding: 3rem 2rem;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    border-top: 1px solid var(--border);
+  }
+
+  @media (max-width: 768px) {
+    .hero h1 { font-size: 2rem; }
+    .nav-links { display: none; }
+    .nav-links.open {
+      display: flex;
+      flex-direction: column;
+      position: absolute;
+      top: 64px; left: 0; right: 0;
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+      padding: 1rem;
+    }
+    .hamburger { display: block; }
+    .capstone-grid, .interview-grid { grid-template-columns: 1fr; }
+    .schedule-time { min-width: 110px; font-size: 0.75rem; }
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-inner">
+    <div class="nav-logo">Career Roadmap</div>
+    <button class="hamburger" onclick="document.querySelector('.nav-links').classList.toggle('open')">&#9776;</button>
+    <ul class="nav-links">
+      <li><a href="#phase1">Phase 1</a></li>
+      <li><a href="#phase2">Phase 2</a></li>
+      <li><a href="#phase3">Phase 3</a></li>
+      <li><a href="#phase4">Phase 4</a></li>
+      <li><a href="#schedule">Schedule</a></li>
+      <li><a href="#resources">Resources</a></li>
+      <li><a href="#salary">Salary</a></li>
+      <li><a href="#interviews">Interviews</a></li>
+    </ul>
+  </div>
+</nav>
+
+<section class="hero">
+  <div class="hero-content">
+    <h1>12-Month Career Plan</h1>
+    <p>Firmware + Embedded + Cloud engineering roadmap for a Computer Engineering graduate. Become an IoT hybrid engineer.</p>
+    <div class="hero-tags">
+      <span class="tag tag-fw">Firmware Engineer</span>
+      <span class="tag tag-emb">Embedded Developer</span>
+      <span class="tag tag-cloud">Cloud Engineer</span>
+    </div>
+    <div class="progress-bar" style="margin-top:2.5rem">
+      <div class="progress-segment" title="Month 1"><span class="progress-label">M1</span></div>
+      <div class="progress-segment" title="Month 2"><span class="progress-label">M2</span></div>
+      <div class="progress-segment" title="Month 3"><span class="progress-label">M3</span></div>
+      <div class="progress-segment" title="Month 4"><span class="progress-label">M4</span></div>
+      <div class="progress-segment" title="Month 5"><span class="progress-label">M5</span></div>
+      <div class="progress-segment" title="Month 6"><span class="progress-label">M6</span></div>
+      <div class="progress-segment" title="Month 7"><span class="progress-label">M7</span></div>
+      <div class="progress-segment" title="Month 8"><span class="progress-label">M8</span></div>
+      <div class="progress-segment" title="Month 9"><span class="progress-label">M9</span></div>
+      <div class="progress-segment" title="Month 10"><span class="progress-label">M10</span></div>
+      <div class="progress-segment" title="Month 11"><span class="progress-label">M11</span></div>
+      <div class="progress-segment" title="Month 12"><span class="progress-label">M12</span></div>
+    </div>
+  </div>
+</section>
+
+<main>
+
+<!-- PHASE 1 -->
+<div class="phase-header" id="phase1">
+  <div class="phase-number">Phase 1 &mdash; Month 1-3</div>
+  <h2>Foundations</h2>
+  <p>Master C, bare-metal programming, and basic cloud concepts</p>
+</div>
+
+<div class="month open">
+  <div class="month-header" onclick="this.parentElement.classList.toggle('open')">
+    <span class="month-title">Month 1: C Language Mastery + Hardware Setup</span>
+    <span class="month-chevron">&#9660;</span>
+  </div>
+  <div class="month-body"><div class="month-content">
+    <div class="week">
+      <h4>Week 1-2: C Deep Dive</h4>
+      <ul>
+        <li>Book: "C Programming: A Modern Approach" by K.N. King (chapters 1-20)</li>
+        <li>Focus areas:
+          <ul class="sub-list">
+            <li>Pointers and pointer arithmetic</li>
+            <li>Memory layout (stack, heap, static, text segments)</li>
+            <li>Bit manipulation (AND, OR, XOR, shifts, masks)</li>
+            <li>Structs, unions, enums</li>
+            <li>Function pointers and callbacks</li>
+            <li>Volatile, const, static keywords (critical for embedded)</li>
+            <li>Preprocessor macros and conditional compilation</li>
+          </ul>
+        </li>
+        <li>Practice: 50+ problems on LeetCode (C only) &mdash; arrays, bit manipulation, linked lists</li>
+        <li>Tool setup: ARM GCC toolchain, OpenOCD, VS Code with C/C++ extension</li>
+      </ul>
+    </div>
+    <div class="week">
+      <h4>Week 3-4: Hardware Acquisition + First Programs</h4>
+      <p style="color:var(--text-muted);margin-bottom:0.75rem">Shopping list (total ~$50-80):</p>
+      <div class="hw-grid">
+        <div class="hw-item"><span>STM32F411 Nucleo board</span><span class="hw-price">$15</span></div>
+        <div class="hw-item"><span>ESP32-S3 DevKit</span><span class="hw-price">$10</span></div>
+        <div class="hw-item"><span>Raspberry Pi 4 or 5</span><span class="hw-price">$35-60</span></div>
+        <div class="hw-item"><span>USB Logic Analyzer</span><span class="hw-price">$10</span></div>
+        <div class="hw-item"><span>Breadboard + wires + LEDs</span><span class="hw-price">$10</span></div>
+        <div class="hw-item"><span>SPI/I2C Sensors (BME280, MPU6050)</span><span class="hw-price">$5 ea</span></div>
+      </div>
+      <div class="project-box">
+        <h5>Project 1: Blink LED (Register-Level)</h5>
+        <ul>
+          <li>Read STM32F411 Reference Manual: RCC, GPIO sections</li>
+          <li>Understand memory-mapped I/O</li>
+          <li>Write to registers directly using pointers (no HAL)</li>
+          <li>Compile with arm-none-eabi-gcc, flash with OpenOCD</li>
+        </ul>
+      </div>
+      <div class="project-box">
+        <h5>Project 2: UART Printf over Serial</h5>
+        <ul>
+          <li>Configure USART2 registers manually</li>
+          <li>Implement a basic putchar() function</li>
+          <li>Redirect printf to UART using _write() syscall</li>
+        </ul>
+      </div>
+    </div>
+  </div></div>
+</div>
+
+<div class="month">
+  <div class="month-header" onclick="this.parentElement.classList.toggle('open')">
+    <span class="month-title">Month 2: Peripherals + Interrupts + Timers</span>
+    <span class="month-chevron">&#9660;</span>
+  </div>
+  <div class="month-body"><div class="month-content">
+    <div class="week">
+      <h4>Week 1: GPIO + External Interrupts</h4>
+      <div class="project-box">
+        <h5>Project: Button Debouncing with Interrupts</h5>
+        <ul>
+          <li>Configure EXTI (External Interrupt) on STM32</li>
+          <li>Understand NVIC (Nested Vectored Interrupt Controller)</li>
+          <li>Implement interrupt priorities</li>
+          <li>Write an ISR (Interrupt Service Routine) &mdash; keep it short</li>
+        </ul>
+      </div>
+      <ul>
+        <li>Learn: Interrupt latency, context saving, volatile keyword importance</li>
+        <li>Read: ARM Cortex-M architecture &mdash; exception model, vector table</li>
+      </ul>
+    </div>
+    <div class="week">
+      <h4>Week 2: Timers + PWM</h4>
+      <div class="project-box">
+        <h5>Project: LED Brightness Control with PWM</h5>
+        <ul>
+          <li>Configure TIM2/TIM3 for PWM output</li>
+          <li>Understand prescaler, auto-reload, capture/compare</li>
+        </ul>
+      </div>
+      <div class="project-box">
+        <h5>Project: Precise Timing with SysTick</h5>
+        <ul>
+          <li>Implement delay_ms() using SysTick</li>
+          <li>Implement a basic scheduler (round-robin) using SysTick</li>
+        </ul>
+      </div>
+      <ul><li>Learn: Timer modes &mdash; input capture, output compare, PWM, one-pulse</li></ul>
+    </div>
+    <div class="week">
+      <h4>Week 3: SPI Communication</h4>
+      <ul><li>Theory: SPI protocol &mdash; MOSI, MISO, SCLK, CS, clock polarity/phase</li></ul>
+      <div class="project-box">
+        <h5>Project: Read BME280 over SPI</h5>
+        <ul>
+          <li>Read the BME280 datasheet (practice reading datasheets!)</li>
+          <li>Configure SPI1 registers on STM32</li>
+          <li>Write SPI transmit/receive functions</li>
+          <li>Parse multi-byte sensor data</li>
+        </ul>
+      </div>
+      <ul><li>Tool practice: Use logic analyzer to capture and verify SPI waveforms</li></ul>
+    </div>
+    <div class="week">
+      <h4>Week 4: I2C Communication</h4>
+      <ul><li>Theory: I2C protocol &mdash; SDA, SCL, addressing, ACK/NACK, clock stretching</li></ul>
+      <div class="project-box">
+        <h5>Project: MPU6050 Accelerometer over I2C</h5>
+        <ul>
+          <li>Configure I2C1 registers</li>
+          <li>Implement I2C start, stop, read, write functions</li>
+          <li>Handle I2C errors and timeouts</li>
+        </ul>
+      </div>
+      <div class="project-box">
+        <h5>Project: OLED Display (SSD1306) over I2C</h5>
+        <ul><li>Display sensor readings on the OLED screen</li></ul>
+      </div>
+      <ul><li>Compare: SPI vs I2C &mdash; when to use which</li></ul>
+    </div>
+    <div class="milestone">Milestone: You can interface with real hardware sensors using bare-metal C.</div>
+  </div></div>
+</div>
+
+<div class="month">
+  <div class="month-header" onclick="this.parentElement.classList.toggle('open')">
+    <span class="month-title">Month 3: RTOS + DMA + Build Systems</span>
+    <span class="month-chevron">&#9660;</span>
+  </div>
+  <div class="month-body"><div class="month-content">
+    <div class="week">
+      <h4>Week 1-2: FreeRTOS</h4>
+      <ul>
+        <li>Setup: Port FreeRTOS to STM32 (or use STM32CubeMX)</li>
+        <li>Concepts to learn:
+          <ul class="sub-list">
+            <li>Tasks &mdash; creation, priorities, stack size</li>
+            <li>Scheduler &mdash; preemptive vs cooperative</li>
+            <li>Queues &mdash; inter-task communication</li>
+            <li>Semaphores &mdash; binary and counting</li>
+            <li>Mutexes &mdash; priority inversion, priority inheritance</li>
+            <li>Software timers</li>
+            <li>Memory management (heap_1 through heap_5)</li>
+          </ul>
+        </li>
+      </ul>
+      <div class="project-box">
+        <h5>Project: Multi-Sensor Data Logger</h5>
+        <ul>
+          <li>Task 1: Read BME280 every 1 second</li>
+          <li>Task 2: Read MPU6050 every 100ms</li>
+          <li>Task 3: Print data over UART</li>
+          <li>Use queues to pass data between tasks</li>
+          <li>Use mutex to protect UART access</li>
+        </ul>
+      </div>
+    </div>
+    <div class="week">
+      <h4>Week 3: DMA (Direct Memory Access)</h4>
+      <ul><li>Theory: DMA channels, circular mode, interrupts</li></ul>
+      <div class="project-box">
+        <h5>Projects</h5>
+        <ul>
+          <li>DMA-based UART transmit (non-blocking printf)</li>
+          <li>DMA-based ADC sampling (continuous analog reading)</li>
+        </ul>
+      </div>
+      <ul><li>Why DMA matters &mdash; CPU offloading, real-time performance</li></ul>
+    </div>
+    <div class="week">
+      <h4>Week 4: Build Systems + Version Control</h4>
+      <ul>
+        <li>CMake: Write CMakeLists.txt for cross-compilation, toolchain files</li>
+        <li>Makefile: Implicit rules, pattern rules, automatic variables</li>
+        <li>Git workflow: Branching (git-flow), meaningful commits, tagging releases</li>
+        <li>Start a GitHub portfolio &mdash; push all projects with clean READMEs</li>
+      </ul>
+    </div>
+    <div class="week">
+      <h4>Cloud (parallel, 30 min/day)</h4>
+      <ul>
+        <li>Create AWS Free Tier account</li>
+        <li>Complete AWS Cloud Practitioner learning path (free on AWS Skill Builder)</li>
+        <li>Basic concepts: EC2, S3, VPC, IAM, Lambda</li>
+      </ul>
+    </div>
+    <div class="milestone">Milestone: 5+ GitHub projects showing bare-metal + RTOS firmware skills.</div>
+  </div></div>
+</div>
+
+<!-- PHASE 2 -->
+<div class="phase-header phase-2" id="phase2">
+  <div class="phase-number">Phase 2 &mdash; Month 4-6</div>
+  <h2>Intermediate</h2>
+  <p>Embedded Linux, device drivers, networking protocols, cloud fundamentals</p>
+</div>
+
+<div class="month">
+  <div class="month-header" onclick="this.parentElement.classList.toggle('open')">
+    <span class="month-title">Month 4: Embedded Linux Fundamentals</span>
+    <span class="month-chevron">&#9660;</span>
+  </div>
+  <div class="month-body"><div class="month-content">
+    <div class="week">
+      <h4>Week 1: Linux Internals for Embedded</h4>
+      <ul>
+        <li>Book: "Linux Device Drivers, 3rd Edition" (free online) &mdash; chapters 1-5</li>
+        <li>Kernel space vs user space</li>
+        <li>System calls, /dev, /sys, /proc filesystems</li>
+        <li>Device tree basics</li>
+        <li>Setup: cross-compilation toolchain (aarch64-linux-gnu-gcc)</li>
+      </ul>
+    </div>
+    <div class="week">
+      <h4>Week 2: Buildroot</h4>
+      <div class="project-box">
+        <h5>Project: Minimal Linux for Raspberry Pi</h5>
+        <ul>
+          <li>Configure kernel, busybox, init system</li>
+          <li>Add custom packages, cross-compile apps</li>
+          <li>Boot on Raspberry Pi, login over serial console</li>
+        </ul>
+      </div>
+    </div>
+    <div class="week">
+      <h4>Week 3: Yocto Project</h4>
+      <div class="project-box">
+        <h5>Project: Custom Linux Distribution</h5>
+        <ul>
+          <li>Set up Poky (reference distribution)</li>
+          <li>Write a custom recipe (.bb file)</li>
+          <li>Create a custom layer</li>
+          <li>Build and flash to Raspberry Pi</li>
+        </ul>
+      </div>
+      <ul><li>This is HARD &mdash; take your time, Yocto has a steep learning curve</li></ul>
+    </div>
+    <div class="week">
+      <h4>Week 4: Device Tree</h4>
+      <ul>
+        <li>Theory: What device tree is, why it exists, DTS syntax</li>
+        <li>Project: Modify device tree to enable/disable peripherals</li>
+        <li>Project: Add custom device tree overlay for an SPI sensor</li>
+      </ul>
+    </div>
+  </div></div>
+</div>
+
+<div class="month">
+  <div class="month-header" onclick="this.parentElement.classList.toggle('open')">
+    <span class="month-title">Month 5: Linux Device Drivers + Kernel Modules</span>
+    <span class="month-chevron">&#9660;</span>
+  </div>
+  <div class="month-body"><div class="month-content">
+    <div class="week">
+      <h4>Week 1: Character Device Driver</h4>
+      <div class="project-box">
+        <h5>Project: /dev/mydevice</h5>
+        <ul>
+          <li>Implement open, read, write, close, ioctl</li>
+          <li>Use copy_to_user / copy_from_user</li>
+          <li>Handle concurrent access with mutexes</li>
+          <li>Load/unload with insmod/rmmod</li>
+        </ul>
+      </div>
+    </div>
+    <div class="week">
+      <h4>Week 2: Platform Driver</h4>
+      <div class="project-box">
+        <h5>Project: GPIO LED Platform Driver</h5>
+        <ul>
+          <li>Parse device tree for GPIO pin number</li>
+          <li>Register as platform driver</li>
+          <li>Expose control via sysfs</li>
+        </ul>
+      </div>
+    </div>
+    <div class="week">
+      <h4>Week 3: SPI/I2C Linux Driver</h4>
+      <div class="project-box">
+        <h5>Project: Linux BME280 Driver</h5>
+        <ul>
+          <li>Register as SPI/I2C client driver</li>
+          <li>Expose sensor data via sysfs or IIO subsystem</li>
+          <li>Handle probe/remove lifecycle</li>
+        </ul>
+      </div>
+    </div>
+    <div class="week">
+      <h4>Week 4: Debugging + Profiling</h4>
+      <ul>
+        <li>GDB with JTAG (OpenOCD + GDB for firmware)</li>
+        <li>GDB remote debugging for Linux targets</li>
+        <li>strace, ltrace for system call tracing</li>
+        <li>perf for performance profiling</li>
+        <li>Valgrind for memory leak detection</li>
+        <li>ftrace / trace-cmd for kernel tracing</li>
+      </ul>
+    </div>
+  </div></div>
+</div>
+
+<div class="month">
+  <div class="month-header" onclick="this.parentElement.classList.toggle('open')">
+    <span class="month-title">Month 6: Networking Protocols + Cloud Foundations</span>
+    <span class="month-chevron">&#9660;</span>
+  </div>
+  <div class="month-body"><div class="month-content">
+    <div class="week">
+      <h4>Week 1: Embedded Networking</h4>
+      <ul>
+        <li>TCP/IP stack basics, MQTT (pub/sub, QoS, retained messages)</li>
+        <li>HTTP/REST, CoAP, TLS/SSL with mbedTLS</li>
+      </ul>
+      <div class="project-box">
+        <h5>Project: ESP32 MQTT Sensor</h5>
+        <ul>
+          <li>Connect to Wi-Fi</li>
+          <li>Publish sensor data to Mosquitto broker</li>
+          <li>Implement TLS for secure communication</li>
+        </ul>
+      </div>
+    </div>
+    <div class="week">
+      <h4>Week 2: BLE (Bluetooth Low Energy)</h4>
+      <ul><li>Theory: GAP, GATT, services, characteristics, descriptors</li></ul>
+      <div class="project-box">
+        <h5>Project: ESP32 BLE Peripheral</h5>
+        <ul>
+          <li>Expose sensor data as BLE characteristics</li>
+          <li>Test with nRF Connect mobile app</li>
+          <li>Advertising, connections, notifications</li>
+        </ul>
+      </div>
+    </div>
+    <div class="week">
+      <h4>Week 3-4: AWS Cloud Deep Dive</h4>
+      <ul>
+        <li>IAM &mdash; users, roles, policies (least privilege)</li>
+        <li>EC2 &mdash; launch, configure, security groups</li>
+        <li>VPC &mdash; subnets, route tables, NAT, internet gateway</li>
+        <li>S3 &mdash; buckets, policies, versioning, lifecycle</li>
+        <li>Lambda &mdash; serverless functions in Python</li>
+        <li>API Gateway &mdash; RESTful APIs</li>
+        <li>DynamoDB &mdash; NoSQL database</li>
+        <li>IoT Core &mdash; MQTT broker for devices (KEY for combo)</li>
+        <li>CloudWatch &mdash; monitoring, alarms, logs</li>
+      </ul>
+      <div class="project-box">
+        <h5>Project: Serverless REST API</h5>
+        <ul><li>Lambda + API Gateway + DynamoDB</li></ul>
+      </div>
+      <ul><li>Start studying for AWS Solutions Architect Associate (SAA-C03)</li></ul>
+    </div>
+    <div class="milestone">Milestone: You can build firmware, write Linux drivers, AND deploy cloud services.</div>
+  </div></div>
+</div>
+
+<!-- PHASE 3 -->
+<div class="phase-header phase-3" id="phase3">
+  <div class="phase-number">Phase 3 &mdash; Month 7-9</div>
+  <h2>Advanced + Portfolio</h2>
+  <p>Build impressive portfolio projects and get certified</p>
+</div>
+
+<div class="capstone">
+  <h3>Month 7: Capstone Project 1 &mdash; IoT Sensor Platform</h3>
+  <div class="capstone-grid">
+    <div class="capstone-card">
+      <h4>Hardware</h4>
+      <ul>
+        <li>STM32 + BME280 + MPU6050 sensors</li>
+        <li>ESP32 as Wi-Fi gateway</li>
+        <li>STM32 &lt;&gt; ESP32 over SPI/UART</li>
+      </ul>
+    </div>
+    <div class="capstone-card">
+      <h4>Firmware (STM32)</h4>
+      <ul>
+        <li>FreeRTOS-based sensor sampling</li>
+        <li>Low-power modes between samples</li>
+        <li>Watchdog timer for reliability</li>
+        <li>OTA update support</li>
+        <li>Custom binary protocol</li>
+      </ul>
+    </div>
+    <div class="capstone-card">
+      <h4>Gateway (ESP32)</h4>
+      <ul>
+        <li>MQTT publish to AWS IoT Core</li>
+        <li>TLS mutual auth with X.509 certs</li>
+        <li>Local data buffering (offline mode)</li>
+        <li>BLE for local configuration</li>
+      </ul>
+    </div>
+    <div class="capstone-card">
+      <h4>Cloud (AWS)</h4>
+      <ul>
+        <li>IoT Core &mdash; device registry, shadows</li>
+        <li>IoT Rules &rarr; Lambda &rarr; DynamoDB</li>
+        <li>API Gateway for data retrieval</li>
+        <li>S3 for firmware OTA binaries</li>
+        <li>Web dashboard on S3 + CloudFront</li>
+      </ul>
+    </div>
+    <div class="capstone-card">
+      <h4>Infrastructure as Code</h4>
+      <ul>
+        <li>All AWS resources in Terraform</li>
+        <li>CI/CD with GitHub Actions</li>
+        <li>Firmware: compile, test, upload to S3</li>
+        <li>Cloud: terraform plan/apply on merge</li>
+      </ul>
+    </div>
+    <div class="capstone-card">
+      <h4>Skills Demonstrated</h4>
+      <ul>
+        <li>Bare-metal firmware + RTOS</li>
+        <li>Wireless protocols</li>
+        <li>Cloud architecture</li>
+        <li>IaC + CI/CD</li>
+        <li>Security (TLS/certs)</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="capstone">
+  <h3>Month 8: Capstone Project 2 &mdash; Embedded Linux Gateway</h3>
+  <div class="capstone-grid">
+    <div class="capstone-card">
+      <h4>Embedded Linux</h4>
+      <ul>
+        <li>Custom Yocto image (minimal footprint)</li>
+        <li>Custom device drivers</li>
+        <li>D-Bus for IPC</li>
+        <li>systemd services</li>
+        <li>Read-only root filesystem</li>
+        <li>A/B partition for safe OTA</li>
+      </ul>
+    </div>
+    <div class="capstone-card">
+      <h4>Application</h4>
+      <ul>
+        <li>Written in C/C++ (or Rust for bonus)</li>
+        <li>ZeroMQ/MQTT internal messaging</li>
+        <li>SQLite for local storage</li>
+        <li>REST API for local network</li>
+      </ul>
+    </div>
+    <div class="capstone-card">
+      <h4>Cloud Integration</h4>
+      <ul>
+        <li>AWS Greengrass (edge computing)</li>
+        <li>Sync with AWS IoT Core</li>
+        <li>Edge Lambda functions</li>
+        <li>Remote device management</li>
+      </ul>
+    </div>
+    <div class="capstone-card">
+      <h4>Docker</h4>
+      <ul>
+        <li>Containerize cloud backend</li>
+        <li>Docker Compose for local dev</li>
+        <li>Push to ECR, deploy on ECS/EKS</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="month">
+  <div class="month-header" onclick="this.parentElement.classList.toggle('open')">
+    <span class="month-title">Month 9: Certifications + Open Source</span>
+    <span class="month-chevron">&#9660;</span>
+  </div>
+  <div class="month-body"><div class="month-content">
+    <div class="week">
+      <h4>Certifications</h4>
+      <ul>
+        <li><strong>AWS Solutions Architect Associate (SAA-C03)</strong> &mdash; the door-opener
+          <ul class="sub-list">
+            <li>Stephane Maarek's Udemy course ($15 on sale)</li>
+            <li>Tutorial Dojo practice exams</li>
+            <li>2-3 weeks focused study with hands-on background</li>
+          </ul>
+        </li>
+        <li>Optional: AWS IoT Specialty, LFCS, Zephyr RTOS dev certification (free)</li>
+      </ul>
+    </div>
+    <div class="week">
+      <h4>Open Source Contributions</h4>
+      <ul>
+        <li>Zephyr RTOS &mdash; write a driver, fix bugs</li>
+        <li>FreeRTOS &mdash; improve docs, add examples</li>
+        <li>Buildroot/Yocto &mdash; add packages, fix recipes</li>
+        <li>ESP-IDF &mdash; contribute examples or bug fixes</li>
+        <li>Even small PRs count &mdash; typos, documentation</li>
+      </ul>
+    </div>
+    <div class="milestone">Milestone: Two capstone projects on GitHub + AWS SAA certification.</div>
+  </div></div>
+</div>
+
+<!-- PHASE 4 -->
+<div class="phase-header phase-4" id="phase4">
+  <div class="phase-number">Phase 4 &mdash; Month 10-12</div>
+  <h2>Job Search</h2>
+  <p>Land your first role</p>
+</div>
+
+<div class="month">
+  <div class="month-header" onclick="this.parentElement.classList.toggle('open')">
+    <span class="month-title">Month 10: Resume + LinkedIn + Portfolio Polish</span>
+    <span class="month-chevron">&#9660;</span>
+  </div>
+  <div class="month-body"><div class="month-content">
+    <div class="week">
+      <h4>GitHub Portfolio Checklist</h4>
+      <ul>
+        <li>Bare-metal STM32 projects (GPIO, UART, SPI, I2C, timers)</li>
+        <li>FreeRTOS multi-sensor data logger</li>
+        <li>Linux kernel module / device driver</li>
+        <li>Yocto/Buildroot custom Linux image</li>
+        <li>IoT Sensor Platform (capstone 1)</li>
+        <li>Embedded Linux Gateway (capstone 2)</li>
+        <li>Cloud infrastructure projects (Terraform configs)</li>
+      </ul>
+    </div>
+    <div class="week">
+      <h4>Resume Tips &mdash; Firmware/Embedded</h4>
+      <ul>
+        <li>Lead with skills: C, ARM Cortex-M, RTOS, Linux drivers, protocols</li>
+        <li>Quantify: "Reduced sensor polling latency by 40% using DMA"</li>
+        <li>List specific chips: STM32F411, ESP32-S3, Raspberry Pi 4</li>
+        <li>List protocols: SPI, I2C, UART, MQTT, BLE, TCP/IP</li>
+        <li>List tools: GDB, OpenOCD, logic analyzer, oscilloscope, Yocto, Git</li>
+      </ul>
+    </div>
+    <div class="week">
+      <h4>Resume Tips &mdash; Cloud</h4>
+      <ul>
+        <li>Lead with: AWS (list services), Terraform, Docker, Kubernetes, CI/CD</li>
+        <li>Mention certification prominently</li>
+        <li>Highlight IoT Core experience &mdash; rare and valuable</li>
+      </ul>
+    </div>
+    <div class="week">
+      <h4>LinkedIn</h4>
+      <ul>
+        <li>Headline: "Firmware & Embedded Systems Engineer | AWS Certified | IoT"</li>
+        <li>Post short technical write-ups about your projects</li>
+        <li>Connect with recruiters at target companies</li>
+        <li>Join groups: Embedded Systems Engineering, AWS Community</li>
+      </ul>
+    </div>
+  </div></div>
+</div>
+
+<div class="month">
+  <div class="month-header" onclick="this.parentElement.classList.toggle('open')">
+    <span class="month-title">Month 11-12: Apply + Interview Prep</span>
+    <span class="month-chevron">&#9660;</span>
+  </div>
+  <div class="month-body"><div class="month-content">
+    <div class="week">
+      <h4>Target Companies</h4>
+      <div class="company-section">
+        <h4>Firmware / Embedded</h4>
+        <ul class="company-tiers">
+          <li><span class="tier-label">Tier 1:</span> Apple, Google (Nest/Pixel), Meta (AR/VR), Tesla, SpaceX, NVIDIA</li>
+          <li><span class="tier-label">Tier 2:</span> Qualcomm, Texas Instruments, NXP, STMicroelectronics, Analog Devices</li>
+          <li><span class="tier-label">Tier 3:</span> Medtronic, Boston Scientific, John Deere, Honeywell, Bosch</li>
+          <li><span class="tier-label">Startups:</span> YC's Work at a Startup &mdash; search "firmware engineer"</li>
+        </ul>
+      </div>
+      <div class="company-section">
+        <h4>Cloud</h4>
+        <ul class="company-tiers">
+          <li><span class="tier-label">Tier 1:</span> AWS, Google Cloud, Microsoft Azure, Cloudflare</li>
+          <li><span class="tier-label">Tier 2:</span> Any company with DevOps/SRE/Cloud team</li>
+          <li><span class="tier-label">Startups:</span> Practically all need cloud engineers</li>
+        </ul>
+      </div>
+      <div class="company-section">
+        <h4>IoT (Your Sweet Spot)</h4>
+        <ul class="company-tiers">
+          <li>AWS IoT team, Google Nest, Particle, Samsara, Verkada</li>
+          <li><span class="tier-label">Industrial:</span> Siemens, Rockwell, ABB, Schneider Electric</li>
+        </ul>
+      </div>
+    </div>
+    <div class="week">
+      <h4>Apply Strategy</h4>
+      <ul>
+        <li>Apply to 5-10 jobs per day</li>
+        <li>Customize resume for each (firmware vs cloud vs IoT emphasis)</li>
+        <li>Reach out to recruiters directly on LinkedIn</li>
+        <li>Attend local/virtual meetups</li>
+        <li>Mock interviews: Pramp, interviewing.io (free)</li>
+      </ul>
+    </div>
+  </div></div>
+</div>
+
+<!-- INTERVIEW PREP -->
+<section id="interviews" style="margin-top:3rem">
+  <h2 style="font-size:1.8rem;margin-bottom:1.5rem">Interview Preparation</h2>
+  <div class="interview-grid">
+    <div class="interview-card">
+      <h4>Technical Questions &mdash; Firmware/Embedded</h4>
+      <ul>
+        <li>Volatile keyword &mdash; when and why</li>
+        <li>Static keyword &mdash; 3 different uses in C</li>
+        <li>Bit manipulation &mdash; set, clear, toggle, check bit N</li>
+        <li>Endianness &mdash; big vs little, conversion</li>
+        <li>Stack overflow &mdash; causes, detection, prevention</li>
+        <li>Memory-mapped I/O vs port-mapped I/O</li>
+        <li>Interrupt latency &mdash; factors, minimization</li>
+        <li>DMA vs interrupt-driven vs polling &mdash; tradeoffs</li>
+        <li>Priority inversion &mdash; what it is, mutex solution</li>
+        <li>Deadlock &mdash; conditions, prevention</li>
+        <li>Cache coherency (Cortex-A/Linux)</li>
+        <li>Power management &mdash; sleep modes, wake sources</li>
+        <li>Watchdog timers &mdash; purpose, implementation</li>
+        <li>Boot process &mdash; reset vector, startup code, main()</li>
+        <li>Linker script &mdash; sections, memory regions</li>
+        <li>Real-time &mdash; hard vs soft</li>
+      </ul>
+    </div>
+    <div class="interview-card">
+      <h4>Coding Questions (C)</h4>
+      <ul>
+        <li>Implement circular buffer</li>
+        <li>Implement state machine</li>
+        <li>Reverse bits in a byte</li>
+        <li>Detect overlapping memory regions</li>
+        <li>Implement malloc/free (fixed-pool allocator)</li>
+        <li>Parse protocol packet from byte stream</li>
+        <li>Implement software debouncing</li>
+        <li>Ring buffer (producer-consumer)</li>
+      </ul>
+    </div>
+    <div class="interview-card">
+      <h4>System Design</h4>
+      <ul>
+        <li>Data logger: 1kHz sampling to SD card</li>
+        <li>OTA update mechanism for device fleet</li>
+        <li>Battery-operated sensor node (power budget)</li>
+      </ul>
+    </div>
+    <div class="interview-card">
+      <h4>Technical Questions &mdash; Cloud</h4>
+      <ul>
+        <li>Scalable web app architecture on AWS</li>
+        <li>VPC networking &mdash; subnets, SGs, NACLs</li>
+        <li>CI/CD pipeline design</li>
+        <li>Docker vs VM &mdash; when to use which</li>
+        <li>Kubernetes &mdash; pods, services, deployments, ingress</li>
+        <li>IaC &mdash; why Terraform over console</li>
+        <li>Monitoring strategy &mdash; metrics, alerts</li>
+        <li>Cost optimization &mdash; reserved, spot, right-sizing</li>
+        <li>Security &mdash; IAM best practices, encryption</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- SCHEDULE -->
+<section id="schedule" style="margin-top:3rem">
+  <h2 style="font-size:1.8rem;margin-bottom:1.5rem">Daily Schedule</h2>
+  <div class="schedule-row"><div class="schedule-time">8:00 - 8:30</div><div class="schedule-activity">Review yesterday's notes, plan today</div></div>
+  <div class="schedule-row"><div class="schedule-time">8:30 - 11:00</div><div class="schedule-activity">Primary study (firmware/embedded)</div></div>
+  <div class="schedule-row"><div class="schedule-time">11:00 - 11:15</div><div class="schedule-activity">Break</div></div>
+  <div class="schedule-row"><div class="schedule-time">11:15 - 12:30</div><div class="schedule-activity">Hands-on project work</div></div>
+  <div class="schedule-row"><div class="schedule-time">12:30 - 1:30</div><div class="schedule-activity">Lunch</div></div>
+  <div class="schedule-row"><div class="schedule-time">1:30 - 3:00</div><div class="schedule-activity">Continue project work</div></div>
+  <div class="schedule-row"><div class="schedule-time">3:00 - 3:15</div><div class="schedule-activity">Break</div></div>
+  <div class="schedule-row"><div class="schedule-time">3:15 - 4:15</div><div class="schedule-activity">Cloud study (AWS)</div></div>
+  <div class="schedule-row"><div class="schedule-time">4:15 - 5:00</div><div class="schedule-activity">LeetCode / interview prep (C)</div></div>
+  <div class="schedule-row"><div class="schedule-time">5:00 - 5:30</div><div class="schedule-activity">Write notes, push code to GitHub, update LinkedIn</div></div>
+  <p style="color:var(--text-muted);margin-top:1rem;font-size:0.9rem">Total: ~8 hours/day of focused learning. Adjust to your schedule.</p>
+</section>
+
+<!-- SALARY -->
+<section id="salary" style="margin-top:3rem">
+  <h2 style="font-size:1.8rem;margin-bottom:1.5rem">Salary Expectations (USD, 2025-2026)</h2>
+  <div class="table-wrapper">
+    <table>
+      <thead><tr><th>Role</th><th>Entry (0-2yr)</th><th>Mid (3-5yr)</th><th>Senior (5+yr)</th></tr></thead>
+      <tbody>
+        <tr><td>Firmware Engineer</td><td>$80K-110K</td><td>$110K-150K</td><td>$150K-200K+</td></tr>
+        <tr><td>Embedded Linux</td><td>$85K-115K</td><td>$115K-160K</td><td>$160K-220K+</td></tr>
+        <tr><td>Cloud Engineer</td><td>$90K-120K</td><td>$120K-160K</td><td>$160K-200K+</td></tr>
+        <tr><td style="color:var(--accent2);font-weight:600">IoT Engineer (combo)</td><td style="color:var(--accent2)">$90K-120K</td><td style="color:var(--accent2)">$130K-170K</td><td style="color:var(--accent2)">$170K-230K+</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p style="color:var(--text-muted);margin-top:0.75rem;font-size:0.9rem">Big tech (FAANG) pays 30-50% above these ranges. Location matters. Remote embedded roles are increasing but still fewer than cloud remote roles.</p>
+</section>
+
+<!-- RESOURCES -->
+<section id="resources" style="margin-top:3rem">
+  <h2 style="font-size:1.8rem;margin-bottom:0.5rem">Key Resources</h2>
+  <div class="resource-grid">
+    <div class="resource-card">
+      <h3>Books</h3>
+      <ul>
+        <li><strong>"C Programming: A Modern Approach"</strong> &mdash; K.N. King</li>
+        <li><strong>"Making Embedded Systems"</strong> &mdash; Elecia White</li>
+        <li><strong>"Linux Device Drivers, 3rd Ed"</strong> &mdash; Corbet, Rubini, Kroah-Hartman (free)</li>
+        <li><strong>"Mastering Embedded Linux Programming"</strong> &mdash; Chris Simmonds</li>
+        <li><strong>"Definitive Guide to ARM Cortex-M3/M4"</strong> &mdash; Joseph Yiu</li>
+      </ul>
+    </div>
+    <div class="resource-card">
+      <h3>Online Courses</h3>
+      <ul>
+        <li><strong>Fastbit Embedded Brain Academy</strong> (Udemy) &mdash; STM32</li>
+        <li><strong>Stephane Maarek</strong> &mdash; AWS SAA course (Udemy)</li>
+        <li><strong>bootlin.com</strong> &mdash; free embedded Linux training</li>
+        <li><strong>nand2tetris.org</strong> &mdash; computing from gates to OS</li>
+      </ul>
+    </div>
+    <div class="resource-card">
+      <h3>Websites</h3>
+      <ul>
+        <li><strong>interrupt.memfault.com</strong> &mdash; best embedded blog</li>
+        <li><strong>embeddedartistry.com</strong> &mdash; best practices</li>
+        <li><strong>jaycarlson.net</strong> &mdash; MCU reviews + tutorials</li>
+        <li><strong>lwn.net</strong> &mdash; Linux kernel news</li>
+        <li><strong>last-minute-engineers.com</strong> &mdash; sensor tutorials</li>
+      </ul>
+    </div>
+    <div class="resource-card">
+      <h3>YouTube</h3>
+      <ul>
+        <li><strong>Ben Eater</strong> &mdash; computer architecture</li>
+        <li><strong>Jacob Sorber</strong> &mdash; C programming + systems</li>
+        <li><strong>Phil's Lab</strong> &mdash; PCB design + embedded</li>
+        <li><strong>Fastbit Embedded</strong> &mdash; STM32 + RTOS</li>
+      </ul>
+    </div>
+    <div class="resource-card">
+      <h3>Practice Platforms</h3>
+      <ul>
+        <li><strong>exercism.org</strong> (C track)</li>
+        <li><strong>leetcode.com</strong> (C solutions)</li>
+        <li><strong>hackerrank.com</strong> (embedded challenges)</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- FINAL ADVICE -->
+<section style="margin-top:3rem">
+  <h2 style="font-size:1.8rem;margin-bottom:1rem">Final Advice</h2>
+  <div class="tip-grid">
+    <div class="tip">
+      <div class="tip-number">1</div>
+      <p><strong>Build things.</strong> No amount of reading replaces writing real firmware that runs on real hardware.</p>
+    </div>
+    <div class="tip">
+      <div class="tip-number">2</div>
+      <p><strong>Show your work.</strong> GitHub is your resume. Document projects with READMEs, schematics, photos.</p>
+    </div>
+    <div class="tip">
+      <div class="tip-number">3</div>
+      <p><strong>Don't wait until you're "ready."</strong> Start applying at month 8-9. You'll learn from interviews.</p>
+    </div>
+    <div class="tip">
+      <div class="tip-number">4</div>
+      <p><strong>The combo is rare.</strong> An engineer who can flash firmware AND deploy Terraform is unicorn-level.</p>
+    </div>
+    <div class="tip">
+      <div class="tip-number">5</div>
+      <p><strong>Community matters.</strong> Join Discord servers (Embedded, Rust Embedded, AWS). Ask and answer questions.</p>
+    </div>
+    <div class="tip">
+      <div class="tip-number">6</div>
+      <p><strong>Stay current.</strong> Follow RISC-V &mdash; it's the future. Learn Rust for embedded &mdash; it's growing fast.</p>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <p>12-Month Career Roadmap &mdash; Firmware + Embedded + Cloud Engineering</p>
+  <p style="margin-top:0.5rem;color:var(--text-muted)">Good hunting.</p>
+</footer>
+
+<script>
+document.querySelectorAll('.progress-segment').forEach((seg, i) => {
+  seg.addEventListener('click', () => {
+    document.querySelectorAll('.progress-segment').forEach((s, j) => {
+      if (j <= i) s.classList.add('active');
+      else s.classList.remove('active');
+    });
+  });
+});
+</script>
+
+</body>
+</html>
