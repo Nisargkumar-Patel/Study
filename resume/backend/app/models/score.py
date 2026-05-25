@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 
 
 class ScoreBreakdown(BaseModel):
@@ -7,7 +7,7 @@ class ScoreBreakdown(BaseModel):
     score: float = Field(ge=0, le=100)
     max_score: float
     percentage: float = Field(ge=0, le=100)
-    details: Dict[str, any] = Field(default_factory=dict)
+    details: Dict[str, Any] = Field(default_factory=dict)
 
 
 class ATSScore(BaseModel):
@@ -31,16 +31,3 @@ class ATSScore(BaseModel):
 
     # Metadata
     calculated_at: Optional[str] = None
-
-
-class ScoreRequest(BaseModel):
-    """Request to calculate ATS score"""
-    resume_data: Dict
-    job_data: Dict
-
-
-class LiveScoreRequest(BaseModel):
-    """Request for real-time score calculation"""
-    resume_text: str
-    job_keywords: List[str]
-    job_skills: List[str]

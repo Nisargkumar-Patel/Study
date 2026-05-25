@@ -58,13 +58,16 @@ async def analyze_job_description(request: AnalyzeJobRequest):
             "data": {
                 "title": analysis.get("title"),
                 "company": analysis.get("company"),
-                "required_skills": analysis.get("required_skills", []),
-                "preferred_skills": analysis.get("preferred_skills", []),
-                "technologies": analysis.get("technologies", []),
-                "keywords": analysis.get("keywords", []),
+                "description": request.job_description,
                 "years_experience": analysis.get("years_experience", 0),
                 "education_requirements": analysis.get("education_requirements", []),
-                "all_skills": analysis.get("all_skills", []),
+                "keywords": {
+                    "required_skills": analysis.get("required_skills", []),
+                    "preferred_skills": analysis.get("preferred_skills", []),
+                    "technologies": analysis.get("technologies", []),
+                    "keywords": analysis.get("keywords", []),
+                    "all_skills": analysis.get("all_skills", []),
+                },
                 "raw_text": request.job_description
             }
         }

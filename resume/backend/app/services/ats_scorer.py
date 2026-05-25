@@ -6,6 +6,7 @@ from datetime import datetime
 import logging
 
 from app.models.score import ATSScore, ScoreBreakdown
+from app.utils.job_data import extract_keyword_strings
 
 logger = logging.getLogger(__name__)
 
@@ -118,12 +119,8 @@ class ATSScorer:
             score = similarity * 100
 
             # Get keyword counts
-            job_keywords = set(job_data.get("keywords", {}).get("keywords", []))
-            resume_keywords = set(resume_data.get("keywords", []))
-
-            if isinstance(job_keywords, list) and len(job_keywords) > 0:
-                if isinstance(job_keywords[0], tuple):
-                    job_keywords = set([kw[0] for kw in job_keywords])
+            job_keywords = set(extract_keyword_strings(job_data))
+            resume_keywords = {str(kw).lower() for kw in resume_data.get("keywords", [])}
 
             matched = len(job_keywords & resume_keywords) if job_keywords else 0
             total = len(job_keywords) if job_keywords else 1
@@ -350,18 +347,7 @@ class ATSScorer:
 
     def _get_missing_keywords(self, resume_data: Dict, job_data: Dict) -> List[str]:
         """Get keywords present in job but missing from resume"""
-        job_keywords = job_data.get("keywords", {})
-
-        if isinstance(job_keywords, dict):
-            keywords_list = job_keywords.get("keywords", [])
-        else:
-            keywords_list = []
-
-        if keywords_list and isinstance(keywords_list[0], tuple):
-            job_kw_set = {kw[0].lower() for kw in keywords_list}
-        else:
-            job_kw_set = {kw.lower() for kw in keywords_list}
-
+        job_kw_set = set(extract_keyword_strings(job_data))
         resume_text = self._get_resume_text(resume_data).lower()
 
         missing = [kw for kw in job_kw_set if kw not in resume_text]
@@ -369,18 +355,7 @@ class ATSScorer:
 
     def _get_matched_keywords(self, resume_data: Dict, job_data: Dict) -> List[str]:
         """Get keywords present in both job and resume"""
-        job_keywords = job_data.get("keywords", {})
-
-        if isinstance(job_keywords, dict):
-            keywords_list = job_keywords.get("keywords", [])
-        else:
-            keywords_list = []
-
-        if keywords_list and isinstance(keywords_list[0], tuple):
-            job_kw_set = {kw[0].lower() for kw in keywords_list}
-        else:
-            job_kw_set = {kw.lower() for kw in keywords_list}
-
+        job_kw_set = set(extract_keyword_strings(job_data))
         resume_text = self._get_resume_text(resume_data).lower()
 
         matched = [kw for kw in job_kw_set if kw in resume_text]

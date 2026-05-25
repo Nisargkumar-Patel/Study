@@ -1,6 +1,6 @@
 import re
 import spacy
-from typing import List, Dict, Set, Tuple
+from typing import List, Dict, Set, Tuple, Any
 from sklearn.feature_extraction.text import TfidfVectorizer
 from collections import Counter
 import logging
@@ -70,7 +70,7 @@ class KeywordExtractor:
             min_df=1
         )
 
-    def extract_from_job_description(self, jd_text: str) -> Dict[str, any]:
+    def extract_from_job_description(self, jd_text: str) -> Dict[str, Any]:
         """
         Extract keywords, skills, and requirements from job description
 
@@ -115,7 +115,7 @@ class KeywordExtractor:
             "all_skills": list(skills)
         }
 
-    def extract_from_resume(self, resume_text: str) -> Dict[str, any]:
+    def extract_from_resume(self, resume_text: str) -> Dict[str, Any]:
         """
         Extract keywords and skills from resume
 

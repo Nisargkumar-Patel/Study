@@ -56,17 +56,6 @@ export const analysisApi = {
     })
     return response.data
   },
-
-  calculateLiveScore: async (
-    resumeData: ResumeData,
-    jobData: JobData
-  ): Promise<{ success: boolean; data: any }> => {
-    const response = await api.post('/analysis/score-live', {
-      resume_data: resumeData,
-      job_data: jobData,
-    })
-    return response.data
-  },
 }
 
 export const exportApi = {

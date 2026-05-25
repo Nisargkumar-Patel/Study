@@ -3,6 +3,47 @@ import { devtools } from 'zustand/middleware'
 import type { ResumeData, JobData, ATSScore, Suggestion } from '../types'
 import { resumeApi, analysisApi } from '../utils/api'
 
+function applySuggestionToResume(
+  resume: ResumeData,
+  suggestion: Suggestion,
+  text: string
+): ResumeData {
+  switch (suggestion.section) {
+    case 'summary':
+      return { ...resume, summary: text }
+
+    case 'experience': {
+      const expIndex = suggestion.location?.experience_index
+      const bulletIndex = suggestion.location?.bullet_index
+      if (expIndex == null || bulletIndex == null) return resume
+      const experience = resume.experience.map((exp, i) =>
+        i === expIndex
+          ? { ...exp, bullets: exp.bullets.map((b, j) => (j === bulletIndex ? text : b)) }
+          : exp
+      )
+      return { ...resume, experience }
+    }
+
+    case 'skills': {
+      if (suggestion.keywords_added.length > 0) {
+        const existing = new Set(resume.skills.map((s) => s.toLowerCase()))
+        const additions = suggestion.keywords_added.filter(
+          (kw) => !existing.has(kw.toLowerCase())
+        )
+        return { ...resume, skills: [...resume.skills, ...additions] }
+      }
+      const skills = text
+        .split(/,\s*/)
+        .map((s) => s.trim())
+        .filter(Boolean)
+      return { ...resume, skills }
+    }
+
+    default:
+      return resume
+  }
+}
+
 interface ResumeState {
   // State
   originalResume: ResumeData | null
@@ -23,7 +64,7 @@ interface ResumeState {
   setJobDescription: (job: JobData) => void
   setATSScore: (score: ATSScore) => void
   setSuggestions: (suggestions: Suggestion[]) => void
-  acceptSuggestion: (id: string) => void
+  acceptSuggestion: (id: string, editedText?: string) => void
   rejectSuggestion: (id: string) => void
   undo: () => void
   redo: () => void
@@ -58,7 +99,7 @@ export const useResumeStore = create<ResumeState>()(
 
       // Synchronous actions
       setOriginalResume: (resume) =>
-        set((state) => ({
+        set(() => ({
           originalResume: resume,
           currentResume: resume,
           history: [resume],
@@ -82,18 +123,16 @@ export const useResumeStore = create<ResumeState>()(
 
       setSuggestions: (suggestions) => set({ suggestions }),
 
-      acceptSuggestion: (id) =>
+      acceptSuggestion: (id, editedText) =>
         set((state) => {
           const suggestion = state.suggestions.find((s) => s.id === id)
           if (!suggestion || !state.currentResume) return state
 
-          // Apply suggestion to resume (simplified)
-          const updatedResume = { ...state.currentResume }
+          const text = editedText ?? suggestion.suggested_text
+          const updatedResume = applySuggestionToResume(state.currentResume, suggestion, text)
 
-          // Mark suggestion as accepted
           const updatedSuggestions = state.suggestions.filter((s) => s.id !== id)
 
-          // Add to history
           const newHistory = state.history.slice(0, state.historyIndex + 1)
           newHistory.push(updatedResume)
 
