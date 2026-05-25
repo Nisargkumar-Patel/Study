@@ -5,6 +5,7 @@ import spacy
 
 from app.models.suggestion import Suggestion, SuggestionType
 from app.utils.job_data import extract_keyword_strings
+from app.utils.text_normalizer import normalize_text, canonicalize, term_matches_text
 
 # Strong action verbs categorized by type
 ACTION_VERBS = {
@@ -296,11 +297,11 @@ class ResumeOptimizer:
         """Get keywords from job missing in resume"""
         job_kw_set = set(extract_keyword_strings(job_data))
 
-        # Get all resume text
-        resume_text = self._get_resume_text(resume_data).lower()
+        # Spelling/acronym-aware presence check
+        resume_blob = normalize_text(self._get_resume_text(resume_data))
 
         # Find missing
-        missing = [kw for kw in job_kw_set if kw not in resume_text]
+        missing = [kw for kw in job_kw_set if not term_matches_text(kw, resume_blob)]
 
         return missing[:20]  # Top 20
 
@@ -311,10 +312,9 @@ class ResumeOptimizer:
         if isinstance(job_data.get("keywords"), dict):
             job_skills.update(job_data["keywords"].get("required_skills", []))
 
-        resume_skills = {skill.lower() for skill in resume_data.get("skills", [])}
-        job_skills_lower = {skill.lower() for skill in job_skills}
+        resume_canon = {canonicalize(skill) for skill in resume_data.get("skills", [])}
 
-        missing = list(job_skills_lower - resume_skills)
+        missing = [skill for skill in job_skills if canonicalize(skill) not in resume_canon]
         return missing
 
     def _get_resume_text(self, resume_data: Dict) -> str:
