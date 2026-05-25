@@ -1,7 +1,16 @@
 import { Server, Socket } from 'socket.io'
+import path from 'path'
+import { v4 as uuid } from 'uuid'
 import { sessionManager } from '../services/sessionManager'
-import { sanitizeText, isValidDisplayName, isValidSessionCode } from '../utils/validation'
+import { AudioProcessor } from '../services/audioProcessor'
+import { Track } from '../types'
+import { sanitizeText, isValidDisplayName, isValidSessionCode, isValidYoutubeUrl } from '../utils/validation'
 import { config } from '../config'
+
+const ALLOWED_SOURCES: Track['source'][] = ['upload', 'youtube', 'soundcloud', 'radio']
+
+// Track session-create timestamps per client IP for rate limiting
+const createTimes = new Map<string, number[]>()
 
 export function registerSessionHandlers(io: Server, socket: Socket) {
   // Create session
@@ -11,6 +20,17 @@ export function registerSessionHandlers(io: Server, socket: Socket) {
       socket.emit('error', { message: 'Invalid display name' })
       return
     }
+
+    // Rate limit session creation per IP
+    const ip = socket.handshake.address
+    const now = Date.now()
+    const recent = (createTimes.get(ip) || []).filter((t) => now - t < config.sessionCreateRateLimit.window)
+    if (recent.length >= config.sessionCreateRateLimit.max) {
+      socket.emit('error', { message: 'Too many sessions created. Please try again later.' })
+      return
+    }
+    recent.push(now)
+    createTimes.set(ip, recent)
 
     const session = sessionManager.createSession(socket.id, name, isPublic)
 
@@ -140,6 +160,27 @@ export function registerSessionHandlers(io: Server, socket: Socket) {
   })
 
   // Queue management
+  socket.on('queue:add', ({ track }: { track: Track }) => {
+    if (!sessionManager.isHost(socket.id)) return
+    const result = sessionManager.getParticipantBySocket(socket.id)
+    if (!result || !track) return
+
+    const hadCurrent = !!result.session.currentTrack
+    sessionManager.addToQueue(result.session.id, track)
+
+    io.to(result.session.id).emit('queue:updated', { queue: result.session.queue })
+
+    // If this became the current track, push it to everyone
+    if (!hadCurrent && result.session.currentTrack) {
+      io.to(result.session.id).emit('sync:state', {
+        track: result.session.currentTrack,
+        position: 0,
+        isPlaying: false,
+        timestamp: Date.now(),
+      })
+    }
+  })
+
   socket.on('queue:remove', ({ trackId }: { trackId: string }) => {
     if (!sessionManager.isHost(socket.id)) return
     const result = sessionManager.getParticipantBySocket(socket.id)
@@ -163,9 +204,18 @@ export function registerSessionHandlers(io: Server, socket: Socket) {
     const result = sessionManager.getParticipantBySocket(socket.id)
     if (!result) return
 
+    if (!url || !isValidYoutubeUrl(url)) {
+      socket.emit('error', { message: 'Suggest a valid YouTube URL' })
+      return
+    }
+
+    const trackSource: Track['source'] = ALLOWED_SOURCES.includes(source as Track['source'])
+      ? (source as Track['source'])
+      : 'youtube'
+
     const suggestion = {
-      id: Math.random().toString(36).slice(2),
-      track: { source, sourceUrl: url },
+      id: uuid(),
+      track: { source: trackSource, sourceUrl: url } as Partial<Track>,
       suggestedBy: result.participant.id,
       suggestedByName: result.participant.displayName,
       status: 'pending' as const,
@@ -180,11 +230,73 @@ export function registerSessionHandlers(io: Server, socket: Socket) {
     }
   })
 
+  // Host approves a suggestion: transcode it and add to the queue
+  socket.on('suggest:approve', async ({ suggestionId }: { suggestionId: string }) => {
+    if (!sessionManager.isHost(socket.id)) return
+    const result = sessionManager.getParticipantBySocket(socket.id)
+    if (!result) return
+
+    const { session } = result
+    const suggestion = session.suggestions.find((s) => s.id === suggestionId)
+    if (!suggestion || suggestion.status !== 'pending') return
+
+    const url = suggestion.track.sourceUrl
+    if (!url) return
+
+    try {
+      const { playlistPath, title, duration } = await AudioProcessor.processYoutubeUrl(url, session.id)
+      const relativePlaylist = path.relative(config.tempDir, playlistPath)
+
+      const track: Track = {
+        id: uuid(),
+        title,
+        artist: 'YouTube',
+        duration,
+        source: 'youtube',
+        sourceUrl: url,
+        hlsPlaylist: `/api/audio/stream/${relativePlaylist}`,
+        addedBy: suggestion.suggestedByName,
+      }
+
+      suggestion.status = 'approved'
+      const hadCurrent = !!session.currentTrack
+      sessionManager.addToQueue(session.id, track)
+
+      io.to(session.id).emit('queue:updated', { queue: session.queue })
+      if (!hadCurrent && session.currentTrack) {
+        io.to(session.id).emit('sync:state', {
+          track: session.currentTrack,
+          position: 0,
+          isPlaying: false,
+          timestamp: Date.now(),
+        })
+      }
+      io.to(session.id).emit('suggest:resolved', { suggestionId, status: 'approved' })
+    } catch (err: any) {
+      suggestion.status = 'rejected'
+      socket.emit('error', { message: err.message || 'Failed to process suggested track' })
+      io.to(session.id).emit('suggest:resolved', { suggestionId, status: 'rejected' })
+    }
+  })
+
+  // Host rejects a suggestion
+  socket.on('suggest:reject', ({ suggestionId }: { suggestionId: string }) => {
+    if (!sessionManager.isHost(socket.id)) return
+    const result = sessionManager.getParticipantBySocket(socket.id)
+    if (!result) return
+
+    const suggestion = result.session.suggestions.find((s) => s.id === suggestionId)
+    if (!suggestion || suggestion.status !== 'pending') return
+
+    suggestion.status = 'rejected'
+    io.to(result.session.id).emit('suggest:resolved', { suggestionId, status: 'rejected' })
+  })
+
   // Emoji reactions
   const reactionTimes: Map<string, number[]> = new Map()
 
   socket.on('reaction:send', ({ emoji }: { emoji: string }) => {
-    const allowed = ['🔥', '❤️', '😂', '👏', '💀']
+    const allowed = ['🔥', '❤️', '😂', '👏', '💀', '🎵', '🙌', '😍']
     if (!allowed.includes(emoji)) return
 
     // Rate limit

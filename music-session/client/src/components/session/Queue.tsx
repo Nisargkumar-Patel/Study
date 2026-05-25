@@ -1,7 +1,7 @@
 import { useSessionStore } from '@/stores/sessionStore'
 
 export function Queue() {
-  const { session, isHost, removeFromQueue } = useSessionStore()
+  const { session, isHost, removeFromQueue, reorderQueue } = useSessionStore()
 
   if (!session || session.queue.length === 0) {
     return (
@@ -46,13 +46,31 @@ export function Queue() {
             </div>
             <span className="text-xs text-muted-foreground/60 hidden sm:block">{track.addedBy}</span>
             {isHost && (
-              <button
-                onClick={() => removeFromQueue(track.id)}
-                className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-300 text-sm transition"
-                title="Remove from queue"
-              >
-                &times;
-              </button>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => reorderQueue(track.id, index - 1)}
+                  disabled={index === 0}
+                  className="text-muted-foreground hover:text-foreground text-sm disabled:opacity-20 transition"
+                  title="Move up"
+                >
+                  &#9650;
+                </button>
+                <button
+                  onClick={() => reorderQueue(track.id, index + 1)}
+                  disabled={index === session.queue.length - 1}
+                  className="text-muted-foreground hover:text-foreground text-sm disabled:opacity-20 transition"
+                  title="Move down"
+                >
+                  &#9660;
+                </button>
+                <button
+                  onClick={() => removeFromQueue(track.id)}
+                  className="text-red-400 hover:text-red-300 text-sm transition"
+                  title="Remove from queue"
+                >
+                  &times;
+                </button>
+              </div>
             )}
           </div>
         ))}

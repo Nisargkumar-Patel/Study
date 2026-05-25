@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react'
 import { useSessionStore } from '@/stores/sessionStore'
 
 export function NowPlaying() {
-  const { session } = useSessionStore()
+  const { session, isHost, seek } = useSessionStore()
   const [elapsed, setElapsed] = useState(0)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -41,6 +41,14 @@ export function NowPlaying() {
 
   const track = session.currentTrack
   const progress = track.duration > 0 ? (elapsed / track.duration) * 100 : 0
+
+  const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isHost || track.duration <= 0) return
+    const rect = e.currentTarget.getBoundingClientRect()
+    const fraction = Math.min(Math.max((e.clientX - rect.left) / rect.width, 0), 1)
+    seek(fraction * track.duration)
+    setElapsed(fraction * track.duration)
+  }
 
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60)
@@ -89,7 +97,11 @@ export function NowPlaying() {
 
       {/* Progress bar */}
       <div className="max-w-sm mx-auto space-y-1">
-        <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
+        <div
+          onClick={handleSeek}
+          className={`w-full h-1.5 bg-muted rounded-full overflow-hidden ${isHost ? 'cursor-pointer hover:h-2 transition-all' : ''}`}
+          title={isHost ? 'Click to seek' : undefined}
+        >
           <div
             className="h-full bg-primary rounded-full transition-all duration-300"
             style={{ width: `${Math.min(progress, 100)}%` }}

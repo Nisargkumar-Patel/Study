@@ -108,7 +108,8 @@ router.post('/youtube', async (req, res) => {
 
 // Serve HLS stream files
 router.get('/stream/*', (req, res) => {
-  const filePath = path.join(config.tempDir, req.params[0])
+  const wildcard = (req.params as Record<string, string>)[0] || ''
+  const filePath = path.join(config.tempDir, wildcard)
 
   // Security: prevent directory traversal
   const resolved = path.resolve(filePath)

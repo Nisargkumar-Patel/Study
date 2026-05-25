@@ -4,6 +4,7 @@ import { NowPlaying } from './NowPlaying'
 import { PlaybackControls } from './PlaybackControls'
 import { Queue } from './Queue'
 import { SessionInfo } from './SessionInfo'
+import { SuggestionPanel, SuggestTrackButton } from './Suggestions'
 import { ChatPanel } from '../chat/ChatPanel'
 import { ReactionBar } from '../reactions/ReactionBar'
 import { FloatingReactions } from '../reactions/FloatingReaction'
@@ -81,6 +82,16 @@ export function SessionPage() {
           {showAddTrack && isHost && (
             <div className="mt-4">
               <AddTrack onClose={() => setShowAddTrack(false)} />
+            </div>
+          )}
+
+          {/* Listeners can suggest tracks */}
+          {!isHost && <SuggestTrackButton />}
+
+          {/* Host reviews pending suggestions */}
+          {isHost && (
+            <div className="mt-6">
+              <SuggestionPanel />
             </div>
           )}
 

@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { SessionState, Track, Participant, ChatMessage, Reaction } from '../types'
+import type { SessionState, Track, Participant, ChatMessage, Reaction, Suggestion } from '../types'
 import { connectSocket, disconnectSocket } from '../utils/socket'
 
 interface SessionStore {
@@ -8,6 +8,9 @@ interface SessionStore {
   isHost: boolean
   messages: ChatMessage[]
   reactions: Reaction[]
+  pendingSuggestions: Suggestion[]
+  suggestionNotice: string | null
+  selfMuted: boolean
   error: string | null
   isConnecting: boolean
 
@@ -24,17 +27,35 @@ interface SessionStore {
   sendMessage: (text: string) => void
   sendReaction: (emoji: string) => void
 
+  addToQueue: (track: Track) => void
   removeFromQueue: (trackId: string) => void
+  reorderQueue: (trackId: string, newIndex: number) => void
+
+  suggestTrack: (url: string) => void
+  approveSuggestion: (suggestionId: string) => void
+  rejectSuggestion: (suggestionId: string) => void
+
+  toggleChat: (enabled: boolean) => void
+  muteUser: (userId: string) => void
+  unmuteUser: (userId: string) => void
+
   addReaction: (reaction: Reaction) => void
   clearError: () => void
+}
+
+const initialTransient = {
+  messages: [] as ChatMessage[],
+  reactions: [] as Reaction[],
+  pendingSuggestions: [] as Suggestion[],
+  suggestionNotice: null as string | null,
+  selfMuted: false,
 }
 
 export const useSessionStore = create<SessionStore>((set, get) => ({
   session: null,
   participantId: null,
   isHost: false,
-  messages: [],
-  reactions: [],
+  ...initialTransient,
   error: null,
   isConnecting: false,
 
@@ -44,8 +65,13 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
 
     socket.emit('session:create', { hostName, isPublic })
 
-    socket.on('session:created', ({ session, code }) => {
-      set({ session, isHost: true, isConnecting: false })
+    socket.on('session:created', ({ session }) => {
+      set({
+        session,
+        isHost: true,
+        isConnecting: false,
+        pendingSuggestions: (session.suggestions || []).filter((s: Suggestion) => s.status === 'pending'),
+      })
       setupListeners(socket, set, get)
     })
 
@@ -74,14 +100,14 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     const socket = connectSocket()
     socket.emit('session:leave')
     disconnectSocket()
-    set({ session: null, participantId: null, isHost: false, messages: [], reactions: [] })
+    set({ session: null, participantId: null, isHost: false, ...initialTransient })
   },
 
   endSession: () => {
     const socket = connectSocket()
     socket.emit('session:end')
     disconnectSocket()
-    set({ session: null, participantId: null, isHost: false, messages: [], reactions: [] })
+    set({ session: null, participantId: null, isHost: false, ...initialTransient })
   },
 
   play: (position) => {
@@ -108,8 +134,41 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     connectSocket().emit('reaction:send', { emoji })
   },
 
+  addToQueue: (track) => {
+    connectSocket().emit('queue:add', { track })
+  },
+
   removeFromQueue: (trackId) => {
     connectSocket().emit('queue:remove', { trackId })
+  },
+
+  reorderQueue: (trackId, newIndex) => {
+    connectSocket().emit('queue:reorder', { trackId, newIndex })
+  },
+
+  suggestTrack: (url) => {
+    connectSocket().emit('suggest:track', { source: 'youtube', url })
+    set({ suggestionNotice: 'Suggestion sent to the host' })
+  },
+
+  approveSuggestion: (suggestionId) => {
+    connectSocket().emit('suggest:approve', { suggestionId })
+  },
+
+  rejectSuggestion: (suggestionId) => {
+    connectSocket().emit('suggest:reject', { suggestionId })
+  },
+
+  toggleChat: (enabled) => {
+    connectSocket().emit('chat:toggle', { enabled })
+  },
+
+  muteUser: (userId) => {
+    connectSocket().emit('chat:muteUser', { userId })
+  },
+
+  unmuteUser: (userId) => {
+    connectSocket().emit('chat:unmuteUser', { userId })
   },
 
   addReaction: (reaction) => {
@@ -127,7 +186,8 @@ function setupListeners(socket: any, set: any, get: any) {
       session: state.session
         ? {
             ...state.session,
-            isPlaying: action === 'play',
+            // 'seek' keeps the current play/pause state; only play/pause change it
+            isPlaying: action === 'seek' ? state.session.isPlaying : action === 'play',
             playbackPosition: position,
             lastSyncTimestamp: timestamp,
           }
@@ -176,7 +236,7 @@ function setupListeners(socket: any, set: any, get: any) {
 
   socket.on('session:ended', () => {
     disconnectSocket()
-    set({ session: null, participantId: null, isHost: false, error: 'Session has ended' })
+    set({ session: null, participantId: null, isHost: false, ...initialTransient, error: 'Session has ended' })
   })
 
   socket.on('chat:newMessage', ({ message }: any) => {
@@ -184,6 +244,15 @@ function setupListeners(socket: any, set: any, get: any) {
       messages: [...state.messages.slice(-200), message],
     }))
   })
+
+  socket.on('chat:toggled', ({ enabled }: any) => {
+    set((state: any) => ({
+      session: state.session ? { ...state.session, chatEnabled: enabled } : null,
+    }))
+  })
+
+  socket.on('chat:muted', () => set({ selfMuted: true }))
+  socket.on('chat:unmuted', () => set({ selfMuted: false }))
 
   socket.on('reaction:received', ({ emoji, userId, displayName }: any) => {
     const reaction: Reaction = {
@@ -194,6 +263,16 @@ function setupListeners(socket: any, set: any, get: any) {
       timestamp: Date.now(),
     }
     get().addReaction(reaction)
+  })
+
+  socket.on('suggest:new', ({ suggestion }: any) => {
+    set((state: any) => ({ pendingSuggestions: [...state.pendingSuggestions, suggestion] }))
+  })
+
+  socket.on('suggest:resolved', ({ suggestionId }: any) => {
+    set((state: any) => ({
+      pendingSuggestions: state.pendingSuggestions.filter((s: Suggestion) => s.id !== suggestionId),
+    }))
   })
 
   socket.on('session:hostDisconnected', () => {

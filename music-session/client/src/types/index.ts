@@ -23,6 +23,14 @@ export interface ChatMessage {
   timestamp: string
 }
 
+export interface Suggestion {
+  id: string
+  track: { source: string; sourceUrl?: string }
+  suggestedBy: string
+  suggestedByName: string
+  status: 'pending' | 'approved' | 'rejected'
+}
+
 export interface SessionState {
   id: string
   code: string
@@ -35,7 +43,7 @@ export interface SessionState {
   lastSyncTimestamp: number
   queue: Track[]
   participants: Participant[]
-  suggestions: any[]
+  suggestions: Suggestion[]
 }
 
 export interface Reaction {

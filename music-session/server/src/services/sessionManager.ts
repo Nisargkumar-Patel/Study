@@ -1,4 +1,4 @@
-import { Session, Participant, Track, TrackSuggestion, ChatMessage } from '../types'
+import { Session, Participant, Track, TrackSuggestion } from '../types'
 import { generateSessionCode } from '../utils/codeGenerator'
 import { cleanupSessionFiles } from '../utils/cleanup'
 import { v4 as uuid } from 'uuid'
@@ -185,6 +185,7 @@ class SessionManager {
     if (!session) return null
     session.currentTrack = session.queue.shift() || null
     session.playbackPosition = 0
+    session.isPlaying = false
     session.lastSyncTimestamp = Date.now()
     return session.currentTrack
   }

@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react'
+import { useSessionStore } from '@/stores/sessionStore'
 
 const API_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:4000'
 
@@ -7,6 +8,7 @@ interface AddTrackProps {
 }
 
 export function AddTrack({ onClose }: AddTrackProps) {
+  const { session, addToQueue } = useSessionStore()
   const [mode, setMode] = useState<'upload' | 'youtube'>('upload')
   const [youtubeUrl, setYoutubeUrl] = useState('')
   const [isUploading, setIsUploading] = useState(false)
@@ -34,20 +36,29 @@ export function AddTrack({ onClose }: AddTrackProps) {
     setError(null)
     setProgress('Uploading and processing...')
 
+    if (!session) {
+      setError('No active session')
+      setIsUploading(false)
+      return
+    }
+
     try {
       const formData = new FormData()
       formData.append('audio', file)
+      formData.append('sessionId', session.id)
+      formData.append('userId', session.hostName)
 
       const res = await fetch(`${API_URL}/api/audio/upload`, {
         method: 'POST',
         body: formData,
       })
 
+      const data = await res.json().catch(() => ({}))
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
         throw new Error(data.error || `Upload failed (${res.status})`)
       }
 
+      if (data.track) addToQueue(data.track)
       setProgress('Track added!')
       setTimeout(onClose, 1000)
     } catch (err: any) {
@@ -66,6 +77,11 @@ export function AddTrack({ onClose }: AddTrackProps) {
       return
     }
 
+    if (!session) {
+      setError('No active session')
+      return
+    }
+
     setIsUploading(true)
     setError(null)
     setProgress('Extracting audio from YouTube...')
@@ -74,14 +90,15 @@ export function AddTrack({ onClose }: AddTrackProps) {
       const res = await fetch(`${API_URL}/api/audio/youtube`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: youtubeUrl.trim() }),
+        body: JSON.stringify({ url: youtubeUrl.trim(), sessionId: session.id, userId: session.hostName }),
       })
 
+      const data = await res.json().catch(() => ({}))
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
         throw new Error(data.error || `Failed to process YouTube URL (${res.status})`)
       }
 
+      if (data.track) addToQueue(data.track)
       setProgress('Track added!')
       setTimeout(onClose, 1000)
     } catch (err: any) {

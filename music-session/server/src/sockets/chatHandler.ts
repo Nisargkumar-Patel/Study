@@ -80,6 +80,20 @@ export function registerChatHandlers(io: Server, socket: Socket) {
     }
   })
 
+  // Host: unmute user
+  socket.on('chat:unmuteUser', ({ userId }: { userId: string }) => {
+    if (!sessionManager.isHost(socket.id)) return
+
+    const result = sessionManager.getParticipantBySocket(socket.id)
+    if (!result) return
+
+    const target = result.session.participants.get(userId)
+    if (target) {
+      target.isMuted = false
+      io.to(target.socketId).emit('chat:unmuted', { reason: 'You have been unmuted by the host' })
+    }
+  })
+
   socket.on('disconnect', () => {
     messageTimes.delete(socket.id)
   })
