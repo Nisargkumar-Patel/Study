@@ -54,6 +54,8 @@ interface ResumeState {
   history: ResumeData[]
   historyIndex: number
   selectedTemplate: string
+  coverLetterEnabled: boolean
+  coverLetter: string | null
   isLoading: boolean
   error: string | null
   currentStep: number
@@ -70,6 +72,8 @@ interface ResumeState {
   redo: () => void
   reset: () => void
   setSelectedTemplate: (template: string) => void
+  setCoverLetterEnabled: (enabled: boolean) => void
+  setCoverLetter: (text: string | null) => void
   setCurrentStep: (step: number) => void
   setLoading: (loading: boolean) => void
   setError: (error: string | null) => void
@@ -79,6 +83,7 @@ interface ResumeState {
   analyzeJob: (jobText: string) => Promise<void>
   calculateScore: () => Promise<void>
   generateSuggestions: () => Promise<void>
+  generateCoverLetter: (company?: string, title?: string) => Promise<void>
 }
 
 export const useResumeStore = create<ResumeState>()(
@@ -93,6 +98,8 @@ export const useResumeStore = create<ResumeState>()(
       history: [],
       historyIndex: -1,
       selectedTemplate: 'classic',
+      coverLetterEnabled: false,
+      coverLetter: null,
       isLoading: false,
       error: null,
       currentStep: 0,
@@ -178,9 +185,15 @@ export const useResumeStore = create<ResumeState>()(
           historyIndex: 0,
           suggestions: [],
           atsScore: null,
+          coverLetter: null,
+          coverLetterEnabled: false,
         })),
 
       setSelectedTemplate: (template) => set({ selectedTemplate: template }),
+
+      setCoverLetterEnabled: (enabled) => set({ coverLetterEnabled: enabled }),
+
+      setCoverLetter: (text) => set({ coverLetter: text }),
 
       setCurrentStep: (step) => set({ currentStep: step }),
 
@@ -267,6 +280,29 @@ export const useResumeStore = create<ResumeState>()(
           }
         } catch (error: any) {
           set({ error: error.message || 'Failed to generate suggestions' })
+          throw error
+        } finally {
+          set({ isLoading: false })
+        }
+      },
+
+      generateCoverLetter: async (company, title) => {
+        const { currentResume, jobDescription } = get()
+        if (!currentResume || !jobDescription) return
+
+        set({ isLoading: true, error: null })
+        try {
+          const response = await analysisApi.generateCoverLetter(
+            currentResume,
+            jobDescription,
+            company,
+            title
+          )
+          if (response.success) {
+            set({ coverLetter: response.data.cover_letter })
+          }
+        } catch (error: any) {
+          set({ error: error.message || 'Failed to generate cover letter' })
           throw error
         } finally {
           set({ isLoading: false })

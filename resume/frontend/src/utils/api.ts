@@ -56,6 +56,21 @@ export const analysisApi = {
     })
     return response.data
   },
+
+  generateCoverLetter: async (
+    resumeData: ResumeData,
+    jobData: JobData,
+    company?: string,
+    title?: string
+  ): Promise<{ success: boolean; data: { cover_letter: string } }> => {
+    const response = await api.post('/analysis/cover-letter', {
+      resume_data: resumeData,
+      job_data: jobData,
+      company,
+      title,
+    })
+    return response.data
+  },
 }
 
 export const exportApi = {
