@@ -1,7 +1,9 @@
 import { useResumeStore } from '@/stores/resumeStore'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { SuggestionCard } from './SuggestionCard'
+import { EditableResume } from './EditableResume'
 
 export function SideBySideEditor() {
   const {
@@ -41,7 +43,7 @@ export function SideBySideEditor() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Original Resume */}
+        {/* Original (read-only) */}
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-sm text-muted-foreground">Original Resume</CardTitle>
@@ -98,25 +100,38 @@ export function SideBySideEditor() {
           </CardContent>
         </Card>
 
-        {/* Optimized Resume / Suggestions */}
+        {/* Updated (editable) + Suggestions, tabbed */}
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm text-muted-foreground">
-              Suggestions ({suggestions.length})
-            </CardTitle>
+            <CardTitle className="text-sm text-muted-foreground">Updated Resume</CardTitle>
           </CardHeader>
           <CardContent>
-            {suggestions.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground text-sm">
-                Click "Generate Suggestions" to get AI-powered optimization recommendations
-              </div>
-            ) : (
-              <div className="space-y-3 max-h-[600px] overflow-y-auto pr-1">
-                {suggestions.map((suggestion) => (
-                  <SuggestionCard key={suggestion.id} suggestion={suggestion} />
-                ))}
-              </div>
-            )}
+            <Tabs defaultValue="edit">
+              <TabsList className="grid grid-cols-2 w-full">
+                <TabsTrigger value="edit">Edit</TabsTrigger>
+                <TabsTrigger value="suggestions">Suggestions ({suggestions.length})</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="edit">
+                <div className="max-h-[640px] overflow-y-auto pr-1">
+                  <EditableResume />
+                </div>
+              </TabsContent>
+
+              <TabsContent value="suggestions">
+                {suggestions.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground text-sm">
+                    Click "Generate Suggestions" to get optimization recommendations
+                  </div>
+                ) : (
+                  <div className="space-y-3 max-h-[640px] overflow-y-auto pr-1">
+                    {suggestions.map((suggestion) => (
+                      <SuggestionCard key={suggestion.id} suggestion={suggestion} />
+                    ))}
+                  </div>
+                )}
+              </TabsContent>
+            </Tabs>
           </CardContent>
         </Card>
       </div>

@@ -6,9 +6,11 @@ import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/toast'
 
 export function ExportOptions() {
-  const { currentResume, selectedTemplate } = useResumeStore()
+  const { currentResume, originalResume, selectedTemplate } = useResumeStore()
   const { addToast } = useToast()
   const [exporting, setExporting] = useState<string | null>(null)
+
+  const sourceFormat = originalResume?.source_format ?? null
 
   const downloadBlob = (blob: Blob, filename: string) => {
     const url = URL.createObjectURL(blob)
@@ -21,7 +23,7 @@ export function ExportOptions() {
     URL.revokeObjectURL(url)
   }
 
-  const handleExport = async (format: 'pdf' | 'docx' | 'text') => {
+  const handleExport = async (format: 'pdf' | 'docx' | 'text' | 'latex') => {
     if (!currentResume) {
       addToast({ title: 'No resume', description: 'Upload a resume first', variant: 'destructive' })
       return
@@ -38,6 +40,9 @@ export function ExportOptions() {
       } else if (format === 'docx') {
         blob = await exportApi.exportToDOCX(currentResume, selectedTemplate)
         filename = `resume_${selectedTemplate}.docx`
+      } else if (format === 'latex') {
+        blob = await exportApi.exportToLatex(currentResume, originalResume)
+        filename = 'resume.tex'
       } else {
         blob = await exportApi.exportToText(currentResume)
         filename = 'resume.txt'
@@ -64,13 +69,19 @@ export function ExportOptions() {
     }
   }
 
+  const fidelityNote = sourceFormat === 'latex'
+    ? 'Source: LaTeX. The LaTeX export is your original .tex with your edits patched in — open in Overleaf to compile your exact PDF. PDF/Word here are ATS-plain regenerations and will not match your LaTeX styling.'
+    : sourceFormat === 'pdf'
+      ? 'Source: PDF. PDF/Word/LaTeX exports here are ATS-plain regenerations from the parsed content — they cannot reproduce your original PDF layout. For an exact format, re-upload as LaTeX.'
+      : 'Upload a resume to enable exports.'
+
   return (
     <Card>
       <CardHeader>
         <CardTitle className="text-lg">Export Resume</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
           <Button
             variant="outline"
             className="h-auto py-4 flex flex-col gap-1.5"
@@ -81,7 +92,7 @@ export function ExportOptions() {
             <span className="text-xs font-medium">
               {exporting === 'pdf' ? 'Exporting...' : 'PDF'}
             </span>
-            <span className="text-xs text-muted-foreground">ATS-friendly</span>
+            <span className="text-xs text-muted-foreground">ATS-plain</span>
           </Button>
 
           <Button
@@ -92,9 +103,24 @@ export function ExportOptions() {
           >
             <span className="text-2xl">&#128462;</span>
             <span className="text-xs font-medium">
-              {exporting === 'docx' ? 'Exporting...' : 'DOCX'}
+              {exporting === 'docx' ? 'Exporting...' : 'Word'}
             </span>
-            <span className="text-xs text-muted-foreground">Word format</span>
+            <span className="text-xs text-muted-foreground">ATS-plain</span>
+          </Button>
+
+          <Button
+            variant="outline"
+            className="h-auto py-4 flex flex-col gap-1.5"
+            onClick={() => handleExport('latex')}
+            disabled={!currentResume || exporting !== null}
+          >
+            <span className="text-2xl">&#128221;</span>
+            <span className="text-xs font-medium">
+              {exporting === 'latex' ? 'Exporting...' : 'LaTeX'}
+            </span>
+            <span className="text-xs text-muted-foreground">
+              {sourceFormat === 'latex' ? 'patched source' : 'Overleaf template'}
+            </span>
           </Button>
 
           <Button
@@ -103,7 +129,7 @@ export function ExportOptions() {
             onClick={() => handleExport('text')}
             disabled={!currentResume || exporting !== null}
           >
-            <span className="text-2xl">&#128221;</span>
+            <span className="text-2xl">&#128196;</span>
             <span className="text-xs font-medium">
               {exporting === 'text' ? 'Exporting...' : 'Text'}
             </span>
@@ -122,9 +148,7 @@ export function ExportOptions() {
           </Button>
         </div>
 
-        <p className="text-xs text-muted-foreground mt-3 text-center">
-          Template: <span className="capitalize font-medium">{selectedTemplate}</span> &bull; PDF export uses single-column, standard fonts, no graphics
-        </p>
+        <p className="text-xs text-muted-foreground mt-3">{fidelityNote}</p>
       </CardContent>
     </Card>
   )

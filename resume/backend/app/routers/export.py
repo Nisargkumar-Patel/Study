@@ -1,10 +1,11 @@
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel
-from typing import Dict, Literal
+from typing import Dict, Literal, Optional
 import logging
 
 from app.services.export_service import get_export_service
+from app.services.latex_export import get_latex_exporter
 
 logger = logging.getLogger(__name__)
 
@@ -15,6 +16,12 @@ class ExportRequest(BaseModel):
     """Request to export resume"""
     resume_data: Dict
     template: Literal["classic", "modern", "technical", "executive", "minimal"] = "classic"
+
+
+class LatexExportRequest(BaseModel):
+    """Request to export the resume as LaTeX (.tex)."""
+    resume_data: Dict
+    original: Optional[Dict] = None
 
 
 @router.post("/pdf")
@@ -102,4 +109,26 @@ async def export_to_text(request: ExportRequest):
 
     except Exception as e:
         logger.error(f"Error exporting to text: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/latex")
+async def export_to_latex(request: LatexExportRequest):
+    """
+    Export the (edited) resume as LaTeX (.tex).
+
+    If the resume was uploaded as LaTeX, the original source is patched with
+    field-level substitutions so the user's styling is preserved. If it was
+    uploaded as PDF, a clean Overleaf-compatible template is generated.
+    """
+    try:
+        exporter = get_latex_exporter()
+        tex = exporter.export(request.resume_data, request.original)
+        return Response(
+            content=tex,
+            media_type="application/x-tex",
+            headers={"Content-Disposition": "attachment; filename=resume.tex"},
+        )
+    except Exception as e:
+        logger.error(f"Error exporting to LaTeX: {e}")
         raise HTTPException(status_code=500, detail=str(e))
