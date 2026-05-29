@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr, Field
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Literal
 from datetime import date
 
 
@@ -39,6 +39,8 @@ class ResumeData(BaseModel):
     certifications: List[str] = Field(default_factory=list)
     projects: List[Dict[str, Any]] = Field(default_factory=list)
     raw_text: Optional[str] = None
+    source_format: Optional[Literal["pdf", "latex"]] = None
+    latex_source: Optional[str] = None
 
 
 class ParsedResume(BaseModel):

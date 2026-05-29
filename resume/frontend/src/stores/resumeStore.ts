@@ -80,6 +80,7 @@ interface ResumeState {
 
   // Async actions
   uploadResume: (file: File) => Promise<void>
+  uploadLatex: (latex: string) => Promise<void>
   analyzeJob: (jobText: string) => Promise<void>
   calculateScore: () => Promise<void>
   generateSuggestions: () => Promise<void>
@@ -217,6 +218,27 @@ export const useResumeStore = create<ResumeState>()(
           }
         } catch (error: any) {
           set({ error: error.message || 'Failed to upload resume' })
+          throw error
+        } finally {
+          set({ isLoading: false })
+        }
+      },
+
+      uploadLatex: async (latex) => {
+        set({ isLoading: true, error: null })
+        try {
+          const response = await resumeApi.uploadLatex(latex)
+          if (response.success) {
+            set({
+              originalResume: response.data,
+              currentResume: response.data,
+              history: [response.data],
+              historyIndex: 0,
+              currentStep: 1,
+            })
+          }
+        } catch (error: any) {
+          set({ error: error.message || 'Failed to parse LaTeX resume' })
           throw error
         } finally {
           set({ isLoading: false })

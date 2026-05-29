@@ -4,6 +4,7 @@ from typing import Optional
 import logging
 
 from app.services.pdf_parser import get_pdf_parser
+from app.services.latex_parser import get_latex_parser
 from app.services.keyword_extractor import get_keyword_extractor
 
 logger = logging.getLogger(__name__)
@@ -14,6 +15,11 @@ router = APIRouter()
 class ParseTextRequest(BaseModel):
     """Request to parse text resume"""
     text: str
+
+
+class UploadLatexRequest(BaseModel):
+    """Request to upload a resume as LaTeX source (pasted or read from a file)."""
+    latex: str
 
 
 @router.post("/upload")
@@ -41,54 +47,85 @@ async def upload_resume(file: UploadFile = File(...)):
             parsed_resume.data.raw_text or ""
         )
 
-        # Convert to dict and add keywords
-        result = {
-            "name": parsed_resume.data.name,
-            "email": parsed_resume.data.email,
-            "phone": parsed_resume.data.phone,
-            "location": parsed_resume.data.location,
-            "linkedin": parsed_resume.data.linkedin,
-            "summary": parsed_resume.data.summary,
-            "experience": [
-                {
-                    "title": exp.title,
-                    "company": exp.company,
-                    "location": exp.location,
-                    "start_date": exp.start_date,
-                    "end_date": exp.end_date,
-                    "bullets": exp.bullets,
-                    "description": exp.description
-                }
-                for exp in parsed_resume.data.experience
-            ],
-            "education": [
-                {
-                    "degree": edu.degree,
-                    "institution": edu.institution,
-                    "location": edu.location,
-                    "graduation_date": edu.graduation_date,
-                    "gpa": edu.gpa,
-                    "honors": edu.honors
-                }
-                for edu in parsed_resume.data.education
-            ],
-            "skills": parsed_resume.data.skills,
-            "certifications": parsed_resume.data.certifications,
-            "projects": parsed_resume.data.projects,
-            "raw_text": parsed_resume.data.raw_text,
-            "formatting_issues": parsed_resume.formatting_issues,
-            "sections_found": parsed_resume.sections_found,
-            "confidence": parsed_resume.confidence,
-            "keywords": resume_keywords.get("keywords", [])
-        }
-
-        return {
-            "success": True,
-            "data": result
-        }
+        result = _serialize_parsed(parsed_resume, resume_keywords)
+        result["source_format"] = "pdf"
+        return {"success": True, "data": result}
 
     except Exception as e:
         logger.error(f"Error processing resume upload: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+def _serialize_parsed(parsed_resume, resume_keywords) -> dict:
+    return {
+        "name": parsed_resume.data.name,
+        "email": parsed_resume.data.email,
+        "phone": parsed_resume.data.phone,
+        "location": parsed_resume.data.location,
+        "linkedin": parsed_resume.data.linkedin,
+        "summary": parsed_resume.data.summary,
+        "experience": [
+            {
+                "title": exp.title,
+                "company": exp.company,
+                "location": exp.location,
+                "start_date": exp.start_date,
+                "end_date": exp.end_date,
+                "bullets": exp.bullets,
+                "description": exp.description,
+            }
+            for exp in parsed_resume.data.experience
+        ],
+        "education": [
+            {
+                "degree": edu.degree,
+                "institution": edu.institution,
+                "location": edu.location,
+                "graduation_date": edu.graduation_date,
+                "gpa": edu.gpa,
+                "honors": edu.honors,
+            }
+            for edu in parsed_resume.data.education
+        ],
+        "skills": parsed_resume.data.skills,
+        "certifications": parsed_resume.data.certifications,
+        "projects": parsed_resume.data.projects,
+        "raw_text": parsed_resume.data.raw_text,
+        "latex_source": parsed_resume.data.latex_source,
+        "source_format": parsed_resume.data.source_format,
+        "formatting_issues": parsed_resume.formatting_issues,
+        "sections_found": parsed_resume.sections_found,
+        "confidence": parsed_resume.confidence,
+        "keywords": resume_keywords.get("keywords", []),
+    }
+
+
+@router.post("/upload-latex")
+async def upload_latex_resume(request: UploadLatexRequest):
+    """
+    Accept a pasted LaTeX (.tex) source as the resume input.
+
+    Returns the same structured shape as /upload, plus ``source_format``
+    ("latex") and ``latex_source`` so the original styling can be preserved
+    on export.
+    """
+    try:
+        if not request.latex or not request.latex.strip():
+            raise HTTPException(status_code=400, detail="LaTeX source is empty")
+
+        parser = get_latex_parser()
+        parsed_resume = parser.parse(request.latex)
+
+        extractor = get_keyword_extractor()
+        resume_keywords = extractor.extract_from_resume(parsed_resume.data.raw_text or "")
+
+        result = _serialize_parsed(parsed_resume, resume_keywords)
+        return {"success": True, "data": result}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error processing LaTeX upload: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

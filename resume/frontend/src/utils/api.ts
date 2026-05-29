@@ -27,6 +27,13 @@ export const resumeApi = {
     const response = await api.post('/resume/parse-text', { text })
     return response.data
   },
+
+  uploadLatex: async (
+    latex: string
+  ): Promise<{ success: boolean; data: ResumeData }> => {
+    const response = await api.post('/resume/upload-latex', { latex })
+    return response.data
+  },
 }
 
 export const analysisApi = {
@@ -111,6 +118,21 @@ export const exportApi = {
       {
         responseType: 'blob',
       }
+    )
+    return response.data
+  },
+
+  exportToLatex: async (
+    resumeData: ResumeData,
+    original: ResumeData | null
+  ): Promise<Blob> => {
+    const response = await api.post(
+      '/export/latex',
+      {
+        resume_data: resumeData,
+        original,
+      },
+      { responseType: 'blob' }
     )
     return response.data
   },
