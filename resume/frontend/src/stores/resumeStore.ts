@@ -3,6 +3,47 @@ import { devtools } from 'zustand/middleware'
 import type { ResumeData, JobData, ATSScore, Suggestion } from '../types'
 import { resumeApi, analysisApi } from '../utils/api'
 
+function applySuggestionToResume(
+  resume: ResumeData,
+  suggestion: Suggestion,
+  text: string
+): ResumeData {
+  switch (suggestion.section) {
+    case 'summary':
+      return { ...resume, summary: text }
+
+    case 'experience': {
+      const expIndex = suggestion.location?.experience_index
+      const bulletIndex = suggestion.location?.bullet_index
+      if (expIndex == null || bulletIndex == null) return resume
+      const experience = resume.experience.map((exp, i) =>
+        i === expIndex
+          ? { ...exp, bullets: exp.bullets.map((b, j) => (j === bulletIndex ? text : b)) }
+          : exp
+      )
+      return { ...resume, experience }
+    }
+
+    case 'skills': {
+      if (suggestion.keywords_added.length > 0) {
+        const existing = new Set(resume.skills.map((s) => s.toLowerCase()))
+        const additions = suggestion.keywords_added.filter(
+          (kw) => !existing.has(kw.toLowerCase())
+        )
+        return { ...resume, skills: [...resume.skills, ...additions] }
+      }
+      const skills = text
+        .split(/,\s*/)
+        .map((s) => s.trim())
+        .filter(Boolean)
+      return { ...resume, skills }
+    }
+
+    default:
+      return resume
+  }
+}
+
 interface ResumeState {
   // State
   originalResume: ResumeData | null
@@ -13,6 +54,8 @@ interface ResumeState {
   history: ResumeData[]
   historyIndex: number
   selectedTemplate: string
+  coverLetterEnabled: boolean
+  coverLetter: string | null
   isLoading: boolean
   error: string | null
   currentStep: number
@@ -23,12 +66,14 @@ interface ResumeState {
   setJobDescription: (job: JobData) => void
   setATSScore: (score: ATSScore) => void
   setSuggestions: (suggestions: Suggestion[]) => void
-  acceptSuggestion: (id: string) => void
+  acceptSuggestion: (id: string, editedText?: string) => void
   rejectSuggestion: (id: string) => void
   undo: () => void
   redo: () => void
   reset: () => void
   setSelectedTemplate: (template: string) => void
+  setCoverLetterEnabled: (enabled: boolean) => void
+  setCoverLetter: (text: string | null) => void
   setCurrentStep: (step: number) => void
   setLoading: (loading: boolean) => void
   setError: (error: string | null) => void
@@ -38,6 +83,7 @@ interface ResumeState {
   analyzeJob: (jobText: string) => Promise<void>
   calculateScore: () => Promise<void>
   generateSuggestions: () => Promise<void>
+  generateCoverLetter: (company?: string, title?: string) => Promise<void>
 }
 
 export const useResumeStore = create<ResumeState>()(
@@ -52,13 +98,15 @@ export const useResumeStore = create<ResumeState>()(
       history: [],
       historyIndex: -1,
       selectedTemplate: 'classic',
+      coverLetterEnabled: false,
+      coverLetter: null,
       isLoading: false,
       error: null,
       currentStep: 0,
 
       // Synchronous actions
       setOriginalResume: (resume) =>
-        set((state) => ({
+        set(() => ({
           originalResume: resume,
           currentResume: resume,
           history: [resume],
@@ -82,18 +130,16 @@ export const useResumeStore = create<ResumeState>()(
 
       setSuggestions: (suggestions) => set({ suggestions }),
 
-      acceptSuggestion: (id) =>
+      acceptSuggestion: (id, editedText) =>
         set((state) => {
           const suggestion = state.suggestions.find((s) => s.id === id)
           if (!suggestion || !state.currentResume) return state
 
-          // Apply suggestion to resume (simplified)
-          const updatedResume = { ...state.currentResume }
+          const text = editedText ?? suggestion.suggested_text
+          const updatedResume = applySuggestionToResume(state.currentResume, suggestion, text)
 
-          // Mark suggestion as accepted
           const updatedSuggestions = state.suggestions.filter((s) => s.id !== id)
 
-          // Add to history
           const newHistory = state.history.slice(0, state.historyIndex + 1)
           newHistory.push(updatedResume)
 
@@ -139,9 +185,15 @@ export const useResumeStore = create<ResumeState>()(
           historyIndex: 0,
           suggestions: [],
           atsScore: null,
+          coverLetter: null,
+          coverLetterEnabled: false,
         })),
 
       setSelectedTemplate: (template) => set({ selectedTemplate: template }),
+
+      setCoverLetterEnabled: (enabled) => set({ coverLetterEnabled: enabled }),
+
+      setCoverLetter: (text) => set({ coverLetter: text }),
 
       setCurrentStep: (step) => set({ currentStep: step }),
 
@@ -228,6 +280,29 @@ export const useResumeStore = create<ResumeState>()(
           }
         } catch (error: any) {
           set({ error: error.message || 'Failed to generate suggestions' })
+          throw error
+        } finally {
+          set({ isLoading: false })
+        }
+      },
+
+      generateCoverLetter: async (company, title) => {
+        const { currentResume, jobDescription } = get()
+        if (!currentResume || !jobDescription) return
+
+        set({ isLoading: true, error: null })
+        try {
+          const response = await analysisApi.generateCoverLetter(
+            currentResume,
+            jobDescription,
+            company,
+            title
+          )
+          if (response.success) {
+            set({ coverLetter: response.data.cover_letter })
+          }
+        } catch (error: any) {
+          set({ error: error.message || 'Failed to generate cover letter' })
           throw error
         } finally {
           set({ isLoading: false })

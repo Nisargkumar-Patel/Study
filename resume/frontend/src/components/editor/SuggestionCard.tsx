@@ -81,7 +81,7 @@ export function SuggestionCard({ suggestion }: SuggestionCardProps) {
         )}
 
         <div className="flex gap-2 pt-1">
-          <Button size="sm" onClick={() => acceptSuggestion(suggestion.id)} className="flex-1">
+          <Button size="sm" onClick={() => acceptSuggestion(suggestion.id, isEditing ? editedText : undefined)} className="flex-1">
             Accept
           </Button>
           <Button size="sm" variant="outline" onClick={() => setIsEditing(!isEditing)}>

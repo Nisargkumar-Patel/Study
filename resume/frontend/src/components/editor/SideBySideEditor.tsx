@@ -6,7 +6,6 @@ import { SuggestionCard } from './SuggestionCard'
 export function SideBySideEditor() {
   const {
     originalResume,
-    currentResume,
     suggestions,
     generateSuggestions,
     isLoading,

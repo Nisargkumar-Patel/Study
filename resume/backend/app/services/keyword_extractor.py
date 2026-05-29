@@ -1,6 +1,6 @@
 import re
 import spacy
-from typing import List, Dict, Set, Tuple
+from typing import List, Dict, Set, Tuple, Any
 from sklearn.feature_extraction.text import TfidfVectorizer
 from collections import Counter
 import logging
@@ -70,7 +70,7 @@ class KeywordExtractor:
             min_df=1
         )
 
-    def extract_from_job_description(self, jd_text: str) -> Dict[str, any]:
+    def extract_from_job_description(self, jd_text: str) -> Dict[str, Any]:
         """
         Extract keywords, skills, and requirements from job description
 
@@ -115,7 +115,7 @@ class KeywordExtractor:
             "all_skills": list(skills)
         }
 
-    def extract_from_resume(self, resume_text: str) -> Dict[str, any]:
+    def extract_from_resume(self, resume_text: str) -> Dict[str, Any]:
         """
         Extract keywords and skills from resume
 
@@ -147,20 +147,18 @@ class KeywordExtractor:
         }
 
     def _extract_skills(self, doc) -> Set[str]:
-        """Extract skills using phrase matcher and NER"""
+        """Extract skills using the curated phrase matcher.
+
+        Only known skills from SKILLS_DATABASE are returned. Noun-chunk scanning
+        was removed because it pulled in noise like "a senior python engineer"
+        whenever a chunk merely contained a skill substring.
+        """
         skills = set()
 
-        # Use phrase matcher
         matches = self.skill_matcher(doc)
         for match_id, start, end in matches:
             skill = doc[start:end].text.lower()
             skills.add(skill)
-
-        # Also check for skills in noun chunks
-        for chunk in doc.noun_chunks:
-            chunk_text = chunk.text.lower()
-            if any(skill in chunk_text for skill in SKILLS_DATABASE[:50]):  # Check top skills
-                skills.add(chunk_text)
 
         return skills
 

@@ -6,6 +6,7 @@ import logging
 from app.services.keyword_extractor import get_keyword_extractor
 from app.services.ats_scorer import get_ats_scorer
 from app.services.resume_optimizer import get_resume_optimizer
+from app.services.cover_letter_generator import get_cover_letter_generator
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +37,14 @@ class LiveScoreRequest(BaseModel):
     job_data: Dict
 
 
+class CoverLetterRequest(BaseModel):
+    """Request to generate a cover letter"""
+    resume_data: Dict
+    job_data: Dict
+    company: Optional[str] = None
+    title: Optional[str] = None
+
+
 @router.post("/analyze-job")
 async def analyze_job_description(request: AnalyzeJobRequest):
     """
@@ -58,13 +67,16 @@ async def analyze_job_description(request: AnalyzeJobRequest):
             "data": {
                 "title": analysis.get("title"),
                 "company": analysis.get("company"),
-                "required_skills": analysis.get("required_skills", []),
-                "preferred_skills": analysis.get("preferred_skills", []),
-                "technologies": analysis.get("technologies", []),
-                "keywords": analysis.get("keywords", []),
+                "description": request.job_description,
                 "years_experience": analysis.get("years_experience", 0),
                 "education_requirements": analysis.get("education_requirements", []),
-                "all_skills": analysis.get("all_skills", []),
+                "keywords": {
+                    "required_skills": analysis.get("required_skills", []),
+                    "preferred_skills": analysis.get("preferred_skills", []),
+                    "technologies": analysis.get("technologies", []),
+                    "keywords": analysis.get("keywords", []),
+                    "all_skills": analysis.get("all_skills", []),
+                },
                 "raw_text": request.job_description
             }
         }
@@ -216,4 +228,31 @@ async def calculate_live_score(request: LiveScoreRequest):
 
     except Exception as e:
         logger.error(f"Error calculating live score: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/cover-letter")
+async def generate_cover_letter(request: CoverLetterRequest):
+    """
+    Generate a template-based cover letter tailored to the resume and job.
+
+    Uses the applicant's own resume data and the analyzed job (no paid APIs).
+    Returns editable plain text.
+    """
+    try:
+        generator = get_cover_letter_generator()
+        cover_letter = generator.generate(
+            request.resume_data, request.job_data,
+            company=request.company, title=request.title
+        )
+
+        return {
+            "success": True,
+            "data": {
+                "cover_letter": cover_letter
+            }
+        }
+
+    except Exception as e:
+        logger.error(f"Error generating cover letter: {e}")
         raise HTTPException(status_code=500, detail=str(e))

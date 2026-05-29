@@ -2,9 +2,10 @@ import re
 import uuid
 from typing import List, Dict, Set
 import spacy
-from collections import defaultdict
 
 from app.models.suggestion import Suggestion, SuggestionType
+from app.utils.job_data import extract_keyword_strings
+from app.utils.text_normalizer import normalize_text, canonicalize, term_matches_text
 
 # Strong action verbs categorized by type
 ACTION_VERBS = {
@@ -102,14 +103,15 @@ class ResumeOptimizer:
 
         # Check for weak verbs
         for weak, strong_alternatives in WEAK_VERBS.items():
-            if weak in summary.lower():
-                new_summary = summary.lower().replace(weak, strong_alternatives[0])
+            pattern = r'\b' + re.escape(weak) + r'\b'
+            if re.search(pattern, summary, re.IGNORECASE):
+                new_summary = re.sub(pattern, strong_alternatives[0], summary, count=1, flags=re.IGNORECASE)
                 suggestions.append(Suggestion(
                     id=str(uuid.uuid4()),
                     type=SuggestionType.WEAK_VERB,
                     section="summary",
                     original_text=summary,
-                    suggested_text=new_summary.capitalize(),
+                    suggested_text=new_summary,
                     reason=f"Replace weak verb '{weak}' with stronger alternative",
                     impact=3
                 ))
@@ -293,26 +295,14 @@ class ResumeOptimizer:
 
     def _get_missing_keywords(self, resume_data: Dict, job_data: Dict) -> List[str]:
         """Get keywords from job missing in resume"""
-        job_keywords = job_data.get("keywords", {})
+        job_kw_set = set(extract_keyword_strings(job_data))
 
-        if isinstance(job_keywords, dict):
-            keywords_list = job_keywords.get("keywords", [])
-        else:
-            keywords_list = []
-
-        # Extract keyword strings
-        if keywords_list and isinstance(keywords_list[0], tuple):
-            job_kw_set = {kw[0].lower() for kw in keywords_list}
-        else:
-            job_kw_set = {str(kw).lower() for kw in keywords_list}
-
-        # Get all resume text
-        resume_text = self._get_resume_text(resume_data).lower()
+        # Spelling/acronym-aware presence check
+        resume_blob = normalize_text(self._get_resume_text(resume_data))
 
         # Find missing
-        missing = [kw for kw in job_kw_set if kw not in resume_text]
+        missing = [kw for kw in job_kw_set if not term_matches_text(kw, resume_blob)]
 
-        # Sort by importance (TF-IDF scores if available)
         return missing[:20]  # Top 20
 
     def _get_missing_skills(self, resume_data: Dict, job_data: Dict) -> List[str]:
@@ -322,10 +312,9 @@ class ResumeOptimizer:
         if isinstance(job_data.get("keywords"), dict):
             job_skills.update(job_data["keywords"].get("required_skills", []))
 
-        resume_skills = {skill.lower() for skill in resume_data.get("skills", [])}
-        job_skills_lower = {skill.lower() for skill in job_skills}
+        resume_canon = {canonicalize(skill) for skill in resume_data.get("skills", [])}
 
-        missing = list(job_skills_lower - resume_skills)
+        missing = [skill for skill in job_skills if canonicalize(skill) not in resume_canon]
         return missing
 
     def _get_resume_text(self, resume_data: Dict) -> str:

@@ -6,6 +6,8 @@ from datetime import datetime
 import logging
 
 from app.models.score import ATSScore, ScoreBreakdown
+from app.utils.job_data import extract_keyword_strings
+from app.utils.text_normalizer import normalize_text, canonicalize, term_matches_text
 
 logger = logging.getLogger(__name__)
 
@@ -111,34 +113,32 @@ class ATSScorer:
             job_vector = vectors[0]
             resume_vector = vectors[1]
 
-            # Calculate cosine similarity
+            # Calculate cosine similarity (kept for reference)
             similarity = cosine_similarity(resume_vector, job_vector)[0][0]
 
-            # Convert to score (0-100)
-            score = similarity * 100
+            # Score on keyword coverage: the share of job keywords the resume
+            # contains. This mirrors how ATS keyword search actually ranks, and
+            # is spelling/acronym-agnostic (e.g. labour/labor, AWS/Amazon Web Services).
+            job_keywords = set(extract_keyword_strings(job_data))
+            resume_blob = normalize_text(
+                self._get_resume_text(resume_data) + " "
+                + " ".join(str(kw) for kw in resume_data.get("keywords", []))
+            )
 
-            # Get keyword counts
-            job_keywords = set(job_data.get("keywords", {}).get("keywords", []))
-            resume_keywords = set(resume_data.get("keywords", []))
-
-            if isinstance(job_keywords, list) and len(job_keywords) > 0:
-                if isinstance(job_keywords[0], tuple):
-                    job_keywords = set([kw[0] for kw in job_keywords])
-
-            matched = len(job_keywords & resume_keywords) if job_keywords else 0
+            matched = sum(1 for kw in job_keywords if term_matches_text(kw, resume_blob))
             total = len(job_keywords) if job_keywords else 1
 
             percentage = (matched / total * 100) if total > 0 else 0
 
             return ScoreBreakdown(
-                score=round(score, 1),
+                score=round(percentage, 1),
                 max_score=100,
                 percentage=round(percentage, 1),
                 details={
-                    "similarity": round(similarity, 3),
+                    "similarity": round(float(similarity), 3),
                     "matched_count": matched,
-                    "total_keywords": total,
-                    "method": "TF-IDF + Cosine Similarity"
+                    "total_keywords": len(job_keywords),
+                    "method": "Keyword coverage (spelling/acronym-aware) + TF-IDF similarity"
                 }
             )
         except Exception as e:
@@ -159,14 +159,14 @@ class ATSScorer:
         # Get resume skills
         resume_skills = set(resume_data.get("skills", []))
 
-        # Case-insensitive matching
-        job_skills_lower = {skill.lower() for skill in job_skills}
-        resume_skills_lower = {skill.lower() for skill in resume_skills}
+        # Match on canonical form (spelling/acronym-aware)
+        job_skills_canon = {canonicalize(skill) for skill in job_skills}
+        resume_skills_canon = {canonicalize(skill) for skill in resume_skills}
 
         # Calculate match
-        matched = job_skills_lower & resume_skills_lower
+        matched = job_skills_canon & resume_skills_canon
         match_count = len(matched)
-        total = len(job_skills_lower) if job_skills_lower else 1
+        total = len(job_skills_canon) if job_skills_canon else 1
 
         percentage = (match_count / total * 100) if total > 0 else 0
         score = percentage  # Direct mapping
@@ -350,40 +350,18 @@ class ATSScorer:
 
     def _get_missing_keywords(self, resume_data: Dict, job_data: Dict) -> List[str]:
         """Get keywords present in job but missing from resume"""
-        job_keywords = job_data.get("keywords", {})
+        job_kw_set = set(extract_keyword_strings(job_data))
+        resume_blob = normalize_text(self._get_resume_text(resume_data))
 
-        if isinstance(job_keywords, dict):
-            keywords_list = job_keywords.get("keywords", [])
-        else:
-            keywords_list = []
-
-        if keywords_list and isinstance(keywords_list[0], tuple):
-            job_kw_set = {kw[0].lower() for kw in keywords_list}
-        else:
-            job_kw_set = {kw.lower() for kw in keywords_list}
-
-        resume_text = self._get_resume_text(resume_data).lower()
-
-        missing = [kw for kw in job_kw_set if kw not in resume_text]
+        missing = [kw for kw in job_kw_set if not term_matches_text(kw, resume_blob)]
         return missing
 
     def _get_matched_keywords(self, resume_data: Dict, job_data: Dict) -> List[str]:
         """Get keywords present in both job and resume"""
-        job_keywords = job_data.get("keywords", {})
+        job_kw_set = set(extract_keyword_strings(job_data))
+        resume_blob = normalize_text(self._get_resume_text(resume_data))
 
-        if isinstance(job_keywords, dict):
-            keywords_list = job_keywords.get("keywords", [])
-        else:
-            keywords_list = []
-
-        if keywords_list and isinstance(keywords_list[0], tuple):
-            job_kw_set = {kw[0].lower() for kw in keywords_list}
-        else:
-            job_kw_set = {kw.lower() for kw in keywords_list}
-
-        resume_text = self._get_resume_text(resume_data).lower()
-
-        matched = [kw for kw in job_kw_set if kw in resume_text]
+        matched = [kw for kw in job_kw_set if term_matches_text(kw, resume_blob)]
         return matched
 
     def _get_missing_skills(self, resume_data: Dict, job_data: Dict) -> List[str]:
@@ -393,10 +371,9 @@ class ATSScorer:
         if isinstance(job_data.get("keywords"), dict):
             job_skills.update(job_data["keywords"].get("required_skills", []))
 
-        resume_skills = set(skill.lower() for skill in resume_data.get("skills", []))
-        job_skills_lower = {skill.lower() for skill in job_skills}
+        resume_canon = {canonicalize(skill) for skill in resume_data.get("skills", [])}
 
-        missing = list(job_skills_lower - resume_skills)
+        missing = [skill for skill in job_skills if canonicalize(skill) not in resume_canon]
         return missing
 
     def _get_matched_skills(self, resume_data: Dict, job_data: Dict) -> List[str]:
@@ -406,10 +383,9 @@ class ATSScorer:
         if isinstance(job_data.get("keywords"), dict):
             job_skills.update(job_data["keywords"].get("required_skills", []))
 
-        resume_skills = set(skill.lower() for skill in resume_data.get("skills", []))
-        job_skills_lower = {skill.lower() for skill in job_skills}
+        resume_canon = {canonicalize(skill) for skill in resume_data.get("skills", [])}
 
-        matched = list(job_skills_lower & resume_skills)
+        matched = [skill for skill in job_skills if canonicalize(skill) in resume_canon]
         return matched
 
     def _generate_suggestions_summary(self, keyword_score, skills_score,
