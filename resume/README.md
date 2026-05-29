@@ -197,7 +197,10 @@ cd backend
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
-python -m spacy download en_core_web_lg
+# Install the spaCy model from its pinned wheel (avoids the broken
+# `spacy download` URL resolver). A smaller model also works: the app
+# falls back en_core_web_lg -> _md -> _sm automatically.
+pip install https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.7.1/en_core_web_lg-3.7.1-py3-none-any.whl
 uvicorn app.main:app --reload
 ```
 
