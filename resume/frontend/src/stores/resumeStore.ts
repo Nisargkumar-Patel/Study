@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { devtools } from 'zustand/middleware'
-import type { ResumeData, JobData, ATSScore, Suggestion } from '../types'
+import type { ResumeData, JobData, ATSScore, Suggestion, OptimizeChanges } from '../types'
 import { resumeApi, analysisApi } from '../utils/api'
 
 function applySuggestionToResume(
@@ -48,6 +48,12 @@ interface ResumeState {
   // State
   originalResume: ResumeData | null
   currentResume: ResumeData | null
+  optimizedResume: ResumeData | null
+  optimizeChanges: OptimizeChanges | null
+  scoreBefore: ATSScore | null
+  scoreAfter: ATSScore | null
+  passesAts: boolean | null
+  passThreshold: number
   jobDescription: JobData | null
   atsScore: ATSScore | null
   suggestions: Suggestion[]
@@ -82,6 +88,7 @@ interface ResumeState {
   uploadResume: (file: File) => Promise<void>
   uploadLatex: (latex: string) => Promise<void>
   analyzeJob: (jobText: string) => Promise<void>
+  autoOptimize: () => Promise<void>
   calculateScore: () => Promise<void>
   generateSuggestions: () => Promise<void>
   generateCoverLetter: (company?: string, title?: string) => Promise<void>
@@ -93,6 +100,12 @@ export const useResumeStore = create<ResumeState>()(
       // Initial state
       originalResume: null,
       currentResume: null,
+      optimizedResume: null,
+      optimizeChanges: null,
+      scoreBefore: null,
+      scoreAfter: null,
+      passesAts: null,
+      passThreshold: 75,
       jobDescription: null,
       atsScore: null,
       suggestions: [],
@@ -255,14 +268,49 @@ export const useResumeStore = create<ResumeState>()(
               currentStep: 2,
             })
 
-            // Auto-calculate score if resume exists
-            const { currentResume } = get()
-            if (currentResume) {
-              await get().calculateScore()
+            // Auto-generate the optimized resume (also computes before/after
+            // scores). Falls back to a plain score if optimization fails.
+            const { originalResume } = get()
+            if (originalResume) {
+              try {
+                await get().autoOptimize()
+              } catch {
+                await get().calculateScore()
+              }
             }
           }
         } catch (error: any) {
           set({ error: error.message || 'Failed to analyze job description' })
+          throw error
+        } finally {
+          set({ isLoading: false })
+        }
+      },
+
+      autoOptimize: async () => {
+        // Always optimize from the ORIGINAL upload so re-runs are idempotent.
+        const { originalResume, jobDescription } = get()
+        if (!originalResume || !jobDescription) return
+
+        set({ isLoading: true, error: null })
+        try {
+          const response = await analysisApi.autoOptimize(originalResume, jobDescription)
+          if (response.success) {
+            const d = response.data
+            set({
+              optimizedResume: d.optimized_resume,
+              // The optimized resume is what gets scored and exported.
+              currentResume: d.optimized_resume,
+              optimizeChanges: d.changes,
+              scoreBefore: d.score_before,
+              scoreAfter: d.score_after,
+              atsScore: d.score_after,
+              passesAts: d.passes_ats,
+              passThreshold: d.pass_threshold,
+            })
+          }
+        } catch (error: any) {
+          set({ error: error.message || 'Failed to optimize resume' })
           throw error
         } finally {
           set({ isLoading: false })

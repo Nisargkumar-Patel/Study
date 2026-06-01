@@ -37,6 +37,12 @@ class LiveScoreRequest(BaseModel):
     job_data: Dict
 
 
+class AutoOptimizeRequest(BaseModel):
+    """Request to auto-generate an ATS-optimized resume"""
+    resume_data: Dict
+    job_data: Dict
+
+
 class CoverLetterRequest(BaseModel):
     """Request to generate a cover letter"""
     resume_data: Dict
@@ -199,6 +205,91 @@ async def generate_optimization_suggestions(request: OptimizeRequest):
 
     except Exception as e:
         logger.error(f"Error generating suggestions: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+def _score_to_dict(score) -> Dict:
+    """Serialize an ATSScore to the same shape /score returns."""
+    return {
+        "overall_score": score.overall_score,
+        "keyword_match": {
+            "score": score.keyword_match.score,
+            "percentage": score.keyword_match.percentage,
+            "details": score.keyword_match.details,
+        },
+        "skills_match": {
+            "score": score.skills_match.score,
+            "percentage": score.skills_match.percentage,
+            "details": score.skills_match.details,
+        },
+        "experience_match": {
+            "score": score.experience_match.score,
+            "percentage": score.experience_match.percentage,
+            "details": score.experience_match.details,
+        },
+        "education_match": {
+            "score": score.education_match.score,
+            "percentage": score.education_match.percentage,
+            "details": score.education_match.details,
+        },
+        "formatting_score": {
+            "score": score.formatting_score.score,
+            "percentage": score.formatting_score.percentage,
+            "details": score.formatting_score.details,
+        },
+        "missing_keywords": score.missing_keywords,
+        "matched_keywords": score.matched_keywords,
+        "missing_skills": score.missing_skills,
+        "matched_skills": score.matched_skills,
+        "formatting_issues": score.formatting_issues,
+        "suggestions_summary": score.suggestions_summary,
+        "calculated_at": score.calculated_at,
+    }
+
+
+@router.post("/auto-optimize")
+async def auto_optimize_resume(request: AutoOptimizeRequest):
+    """
+    Auto-generate an ATS-optimized version of the resume (no manual editing).
+
+    Applies only truthful, non-fabricating transformations (adds missing
+    required skills, weaves missing keywords into the summary, strengthens weak
+    verbs in existing bullets) and returns the optimized resume along with the
+    ATS score BEFORE and AFTER, so the UI can show that it passes/improves.
+    """
+    try:
+        optimizer = get_resume_optimizer()
+        scorer = get_ats_scorer()
+
+        before_score = scorer.calculate_score(request.resume_data, request.job_data)
+
+        optimized, changes = optimizer.build_optimized_resume(
+            request.resume_data, request.job_data
+        )
+        # Preserve source metadata so export (LaTeX/PDF) still works correctly.
+        for key in ("source_format", "latex_source", "raw_text"):
+            if key in request.resume_data and key not in optimized:
+                optimized[key] = request.resume_data[key]
+
+        after_score = scorer.calculate_score(optimized, request.job_data)
+
+        # ATS "pass" threshold for this heuristic scorer.
+        PASS_THRESHOLD = 75.0
+
+        return {
+            "success": True,
+            "data": {
+                "optimized_resume": optimized,
+                "changes": changes,
+                "score_before": _score_to_dict(before_score),
+                "score_after": _score_to_dict(after_score),
+                "passes_ats": after_score.overall_score >= PASS_THRESHOLD,
+                "pass_threshold": PASS_THRESHOLD,
+            },
+        }
+
+    except Exception as e:
+        logger.error(f"Error auto-optimizing resume: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

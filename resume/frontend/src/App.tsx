@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button'
 
 function AppContent() {
   const [darkMode, setDarkMode] = useState(true)
-  const { currentStep, error, setError } = useResumeStore()
+  const { currentStep, error, setError, setCurrentStep } = useResumeStore()
 
   useEffect(() => {
     if (darkMode) {
@@ -87,6 +87,9 @@ function AppContent() {
                 <div>
                   <ATSScoreCard />
                 </div>
+              </div>
+              <div className="flex justify-end">
+                <Button onClick={() => setCurrentStep(3)}>Continue to Export →</Button>
               </div>
             </div>
           )}
