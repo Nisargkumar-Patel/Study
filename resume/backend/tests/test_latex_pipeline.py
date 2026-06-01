@@ -126,6 +126,25 @@ def test_latex_export_generates_template_when_no_source():
     assert "SQL, Python, Tableau" in out_tex
 
 
+def test_docx_export_handles_missing_contact_fields():
+    """Regression: empty contact line used to crash with IndexError because
+    `add_paragraph("")` produces a paragraph with no runs."""
+    from app.services.export_service import get_export_service
+
+    resume = {
+        "name": "Pat Smith",
+        # Intentionally no email/phone/location/linkedin -> empty contact line
+        "summary": "Engineer.",
+        "experience": [],
+        "education": [],
+        "skills": [],
+        "certifications": [],
+        "projects": [],
+    }
+    out = get_export_service().export_to_docx(resume, "classic")
+    assert isinstance(out, (bytes, bytearray)) and len(out) > 1000
+
+
 def _to_dict(data):
     return {
         "name": data.name, "email": data.email, "phone": data.phone,
