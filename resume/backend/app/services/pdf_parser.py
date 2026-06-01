@@ -19,6 +19,25 @@ SECTION_PATTERNS = {
 }
 
 
+# Bullet/list markers seen across real-world resumes. Critically includes
+# U+25CF ● (BLACK CIRCLE), which many PDF templates use and which the original
+# parser did not recognize, silently dropping every bullet.
+_BULLET_CHARS = "•◦▪‣·∙○●◉■□►▶◆◇»-*"
+
+# A full date RANGE (start – end). Used both to extract dates and to detect
+# where one job entry begins. A lone year (e.g. "in 2023" inside a bullet) does
+# NOT match, so bullets no longer fragment an entry.
+_DATE_TOKEN = (
+    r"(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|"
+    r"January|February|March|April|May|June|July|August|September|October|"
+    r"November|December)\s+\d{4}|\d{1,2}/\d{4}|\d{4}"
+)
+DATE_RANGE_PATTERN = (
+    r"(" + _DATE_TOKEN + r")\s*(?:[-–—]|to)\s*"
+    r"(" + _DATE_TOKEN + r"|Present|Current|Now|Ongoing)"
+)
+
+
 class PDFParser:
     """Parse resume PDFs and extract structured data"""
 
@@ -70,6 +89,37 @@ class PDFParser:
                 sections_found=[]
             )
 
+    @staticmethod
+    def _strip_bullet(line: str) -> str:
+        """Remove a leading bullet/number marker from a line."""
+        line = line.strip()
+        # Leading run of bullet chars + whitespace
+        line = re.sub(r"^[" + re.escape(_BULLET_CHARS) + r"]+\s*", "", line)
+        # Numbered list "1." / "1)"
+        line = re.sub(r"^\d+[.)]\s*", "", line)
+        return line.strip()
+
+    @staticmethod
+    def _is_bullet_line(line: str) -> bool:
+        s = line.strip()
+        if not s:
+            return False
+        if s[0] in _BULLET_CHARS:
+            return True
+        return bool(re.match(r"^\d+[.)]\s+", s))
+
+    @staticmethod
+    def _split_inline_bullets(text: str) -> List[str]:
+        """Split a blob that uses inline bullet chars (e.g. "● A ● B ● C")
+        into separate items. Falls back to newline splitting."""
+        # If a bullet char appears mid-text (not just line starts), split on it.
+        parts = re.split(r"\s*[" + re.escape("•◦▪‣○●◉■□►▶◆◇") + r"]\s*", text)
+        items = [p.strip() for p in parts if p and p.strip()]
+        if len(items) > 1:
+            return items
+        # Otherwise split on newlines
+        return [l.strip() for l in text.split("\n") if l.strip()]
+
     def _detect_sections(self, text: str) -> Dict[str, Tuple[int, int]]:
         """
         Detect resume sections and their positions
@@ -114,7 +164,7 @@ class PDFParser:
         contact_info = self._extract_contact_info(full_text[:500])
 
         # Parse each section
-        summary = self._extract_section_text(sections.get("summary"), full_text) if "summary" in sections else None
+        summary = self._extract_summary(sections.get("summary"), full_text) if "summary" in sections else None
         experience = self._parse_experience(sections.get("experience"), full_text) if "experience" in sections else []
         education = self._parse_education(sections.get("education"), full_text) if "education" in sections else []
         skills = self._parse_skills(sections.get("skills"), full_text) if "skills" in sections else []
@@ -173,53 +223,174 @@ class PDFParser:
             return '\n'.join(lines[1:]).strip()
         return section_text
 
+    def _extract_summary(self, section_range: Tuple[int, int], full_text: str) -> str:
+        """Extract summary text, normalizing inline bullet separators to spaces.
+
+        Some templates render a paragraph summary with ● between sentences; we
+        keep the full text but drop the stray markers so it reads as prose.
+        """
+        text = self._extract_section_text(section_range, full_text)
+        if not text:
+            return ""
+        # Replace inline bullet markers with a space, collapse whitespace.
+        text = re.sub(r"[" + re.escape("•◦▪‣○●◉■□►▶◆◇") + r"]", " ", text)
+        text = re.sub(r"\s+", " ", text)
+        return text.strip()
+
     def _parse_experience(self, section_range: Tuple[int, int], full_text: str) -> List[ExperienceItem]:
-        """Parse experience section"""
+        """Parse experience section.
+
+        Non-lossy by design: every job block is split on full date RANGES (not
+        lone years, which previously shredded entries), bullets are recognized
+        across all common markers (including U+25CF ●), and any non-bullet body
+        text is preserved in `description` so nothing the user wrote is dropped.
+        """
         if not section_range:
             return []
 
         section_text = self._extract_section_text(section_range, full_text)
+        if not section_text.strip():
+            return []
+
         experiences = []
-
-        # Split into individual jobs (look for date patterns)
-        job_blocks = self._split_by_dates(section_text)
-
-        for block in job_blocks:
+        for block in self._split_experience_blocks(section_text):
             exp = self._parse_single_experience(block)
             if exp:
                 experiences.append(exp)
 
+        # Safety net: if structured parsing somehow produced nothing but there
+        # IS text, keep it all as a single entry's description rather than
+        # silently dropping the whole section.
+        if not experiences and section_text.strip():
+            experiences.append(ExperienceItem(
+                title="", company="", start_date="", end_date="",
+                bullets=[], description=section_text.strip(),
+            ))
+
         return experiences
 
-    def _parse_single_experience(self, block: str) -> ExperienceItem:
-        """Parse a single experience entry"""
-        lines = [line.strip() for line in block.split('\n') if line.strip()]
+    def _split_experience_blocks(self, text: str) -> List[str]:
+        """Split the experience section into one block per job.
 
-        if not lines:
+        Job entries take two common shapes:
+          (a) "Title — Company" on one line, date range on the NEXT line, or
+          (b) title/company and date range on the SAME line.
+        A new block therefore begins at a non-bullet "header" line that either
+        contains a date range, or is immediately followed by a date-range line.
+        Crucially this keeps a title line together with the date line below it
+        (the previous implementation stranded the title in the prior entry).
+
+        A block boundary only fires once the current block already has *content*
+        (a date range or at least one bullet), so a bare title directly above its
+        own date line does not split into two empty entries.
+        """
+        lines = text.split("\n")
+        n = len(lines)
+
+        def has_range(s: str) -> bool:
+            return bool(re.search(DATE_RANGE_PATTERN, s, re.IGNORECASE))
+
+        def next_nonempty(idx: int) -> str:
+            j = idx + 1
+            while j < n and not lines[j].strip():
+                j += 1
+            return lines[j].strip() if j < n else ""
+
+        blocks: List[List[str]] = []
+        current: List[str] = []
+        current_has_content = False  # date range or bullet seen in current block
+
+        for i, line in enumerate(lines):
+            s = line.strip()
+            if not s:
+                current.append(line)
+                continue
+
+            is_bullet = self._is_bullet_line(s)
+            line_range = has_range(s)
+
+            # Is this line the start of a new entry's header?
+            starts_entry = (not is_bullet) and (
+                line_range or (not is_bullet and has_range(next_nonempty(i)) and not self._is_bullet_line(next_nonempty(i)))
+            )
+
+            if starts_entry and current_has_content:
+                blocks.append(current)
+                current = []
+                current_has_content = False
+
+            current.append(line)
+            if line_range or is_bullet:
+                current_has_content = True
+
+        if current:
+            blocks.append(current)
+
+        return ["\n".join(b).strip() for b in blocks if "\n".join(b).strip()]
+
+    def _parse_single_experience(self, block: str) -> ExperienceItem:
+        """Parse a single experience entry without discarding content."""
+        raw_lines = [line.strip() for line in block.split("\n") if line.strip()]
+        if not raw_lines:
             return None
 
-        # First line usually has title and company
-        title_line = lines[0]
-        title, company = self._extract_title_company(title_line)
+        dates = self._extract_dates(block)
 
-        # Second line usually has dates
-        dates = self._extract_dates(lines[1] if len(lines) > 1 else lines[0])
+        # Identify the header line carrying title/company. Prefer the first
+        # non-bullet line that is NOT purely a date range; the date range often
+        # sits on its own line directly below the title.
+        def _is_pure_date(line: str) -> bool:
+            stripped = re.sub(DATE_RANGE_PATTERN, "", line, flags=re.IGNORECASE)
+            return not stripped.strip(" -–—|,")
 
-        # Remaining lines are bullets
-        bullets = []
-        for line in lines[1:]:
-            if line.startswith(('•', '-', '◦', '▪', '*')) or re.match(r'^\d+\.', line):
-                # Clean bullet
-                bullet = re.sub(r'^[•\-◦▪*]\s*', '', line)
-                bullet = re.sub(r'^\d+\.\s*', '', bullet)
-                bullets.append(bullet.strip())
+        header_idx = next(
+            (i for i, l in enumerate(raw_lines)
+             if not self._is_bullet_line(l) and not _is_pure_date(l)),
+            None,
+        )
+        if header_idx is None:
+            # No title line at all (only dates + bullets); fall back to first line.
+            header_idx = 0
+            title, company = "", ""
+        else:
+            header = raw_lines[header_idx]
+            header_wo_dates = re.sub(DATE_RANGE_PATTERN, "", header, flags=re.IGNORECASE)
+            header_wo_dates = header_wo_dates.strip(" -–—|,")
+            title, company = self._extract_title_company(header_wo_dates)
+
+        bullets: List[str] = []
+        leftover: List[str] = []
+        for i, line in enumerate(raw_lines):
+            if i == header_idx:
+                continue
+            if self._is_bullet_line(line):
+                # A single line may pack several inline bullets ("● A ● B").
+                for item in self._split_inline_bullets(line):
+                    cleaned = self._strip_bullet(item)
+                    if cleaned:
+                        bullets.append(cleaned)
+            elif _is_pure_date(line):
+                # A standalone date line — already captured in `dates`; never
+                # content, regardless of position.
+                continue
+            else:
+                # Non-bullet, non-date text: could be a sub-blob of inline
+                # bullets, or genuine description. Preserve it either way.
+                pieces = self._split_inline_bullets(line)
+                if len(pieces) > 1:
+                    bullets.extend(self._strip_bullet(p) for p in pieces if self._strip_bullet(p))
+                else:
+                    leftover.append(line)
+
+        description = " ".join(leftover).strip() or None
 
         return ExperienceItem(
             title=title,
             company=company,
             start_date=dates.get("start", ""),
-            end_date=dates.get("end", "Present"),
-            bullets=bullets
+            end_date=dates.get("end", "") or "",
+            bullets=bullets,
+            description=description,
         )
 
     def _parse_education(self, section_range: Tuple[int, int], full_text: str) -> List[EducationItem]:
@@ -230,9 +401,11 @@ class PDFParser:
         section_text = self._extract_section_text(section_range, full_text)
         education = []
 
-        # Split by degree patterns
-        degree_pattern = r'\b(bachelor|master|phd|doctorate|associate|bs|ba|ms|ma|mba|phd)\b'
-        blocks = re.split(f'(?={degree_pattern})', section_text, flags=re.IGNORECASE)
+        # Split by degree patterns. The lookahead uses a NON-capturing group so
+        # re.split does not inject the matched degree word as its own fragment
+        # (which previously produced junk entries like degree="Bachelor").
+        degree_pattern = r'(?:bachelor|master|phd|doctorate|associate|bs|ba|ms|ma|mba)'
+        blocks = re.split(rf'(?=\b{degree_pattern}\b)', section_text, flags=re.IGNORECASE)
 
         for block in blocks:
             if not block.strip():
@@ -267,29 +440,46 @@ class PDFParser:
         )
 
     def _parse_skills(self, section_range: Tuple[int, int], full_text: str) -> List[str]:
-        """Parse skills section"""
+        """Parse skills section.
+
+        Handles category-grouped layouts like
+        "● Languages: Python, JavaScript ● Frontend: HTML, React ..." by
+        stripping the inline bullet markers and the "Category:" labels, then
+        splitting the remaining values on commas/pipes/slashes. De-duplicates
+        while preserving order.
+        """
         if not section_range:
             return []
 
         section_text = self._extract_section_text(section_range, full_text)
+        if not section_text.strip():
+            return []
 
-        # Skills are usually comma or pipe separated
-        skills = []
+        # Break into category chunks on inline bullet markers and newlines.
+        chunks = re.split(r"[" + re.escape("•◦▪‣○●◉■□►▶◆◇") + r"\n]", section_text)
 
-        # Try comma separation first
-        if ',' in section_text:
-            skills = [s.strip() for s in section_text.split(',')]
-        elif '|' in section_text:
-            skills = [s.strip() for s in section_text.split('|')]
-        else:
-            # Try bullet points
-            lines = section_text.split('\n')
-            for line in lines:
-                line = re.sub(r'^[•\-◦▪*]\s*', '', line.strip())
-                if line:
-                    skills.append(line)
+        skills: List[str] = []
+        seen = set()
+        for chunk in chunks:
+            chunk = chunk.strip()
+            if not chunk:
+                continue
+            # Drop a leading "Category:" label (e.g. "Languages: Python, ...").
+            if ":" in chunk:
+                label, _, rest = chunk.partition(":")
+                # Only treat as a label if it's short (a real category name).
+                if len(label.split()) <= 4:
+                    chunk = rest.strip()
+            # Split values on common delimiters. Note: do NOT split on "/",
+            # which would wrongly break compound skills like CI/CD or TCP/IP.
+            for value in re.split(r"[,|]", chunk):
+                value = value.strip(" .;")
+                key = value.lower()
+                if value and len(value) < 60 and key not in seen:
+                    seen.add(key)
+                    skills.append(value)
 
-        return [s for s in skills if s and len(s) < 50]  # Filter out too long items
+        return skills
 
     def _parse_certifications(self, section_range: Tuple[int, int], full_text: str) -> List[str]:
         """Parse certifications section"""
@@ -330,29 +520,51 @@ class PDFParser:
         return blocks
 
     def _extract_title_company(self, line: str) -> Tuple[str, str]:
-        """Extract title and company from line"""
-        # Common patterns: "Title at Company" or "Title | Company" or "Title, Company"
-        if ' at ' in line:
-            parts = line.split(' at ', 1)
-            return parts[0].strip(), parts[1].strip()
-        elif ' | ' in line:
-            parts = line.split(' | ', 1)
-            return parts[0].strip(), parts[1].strip()
-        elif ',' in line:
-            parts = line.split(',', 1)
-            return parts[0].strip(), parts[1].strip()
-        else:
-            return line.strip(), ""
+        """Extract title and company from a header line.
+
+        Handles the common separators in priority order:
+          "Title at Company", "Title — Company", "Title – Company",
+          "Title | Company", "Title, Company".
+        For dash-separated lines like "Title — Company – Location", only the
+        first segment after the title is taken as the company; any trailing
+        "– Location" is left out of the company name.
+        """
+        line = line.strip()
+        if not line:
+            return "", ""
+
+        # " at " (word-boundaried)
+        if re.search(r"\s+at\s+", line):
+            parts = re.split(r"\s+at\s+", line, maxsplit=1)
+            return parts[0].strip(), self._company_head(parts[1])
+
+        # Em/en dash or pipe — these reliably separate title from company.
+        for sep in ("—", "–", "|"):
+            if sep in line:
+                head, _, tail = line.partition(sep)
+                return head.strip(" -–—|,"), self._company_head(tail)
+
+        # Comma (least reliable; only the first field is the title).
+        if "," in line:
+            head, _, tail = line.partition(",")
+            return head.strip(), self._company_head(tail)
+
+        return line, ""
+
+    @staticmethod
+    def _company_head(text: str) -> str:
+        """Take the company name from a "Company – Location" style tail,
+        dropping a trailing location segment after a dash."""
+        text = text.strip(" -–—|,")
+        # Split off a trailing "– Location" / "— Location".
+        company = re.split(r"\s*[–—]\s*", text, maxsplit=1)[0]
+        return company.strip(" -–—|,")
 
     def _extract_dates(self, text: str) -> Dict[str, str]:
-        """Extract start and end dates"""
-        # Pattern: "Month Year - Month Year" or "Year - Year"
-        date_pattern = r'((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}|\d{4})\s*[-–—to]\s*((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}|\d{4}|Present|Current)'
-
-        match = re.search(date_pattern, text, re.IGNORECASE)
+        """Extract start and end dates from a date range."""
+        match = re.search(DATE_RANGE_PATTERN, text, re.IGNORECASE)
         if match:
-            return {"start": match.group(1), "end": match.group(2)}
-
+            return {"start": match.group(1).strip(), "end": match.group(2).strip()}
         return {"start": "", "end": ""}
 
     def _extract_graduation_date(self, text: str) -> str:
