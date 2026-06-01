@@ -5,40 +5,20 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from collections import Counter
 import logging
 
+from app.services.skills_data import SKILLS_DATABASE, SKILL_ALIASES, TECH_SKILLS
+
 logger = logging.getLogger(__name__)
 
-# Comprehensive skills database (1000+ common skills)
-SKILLS_DATABASE = [
-    # Programming Languages
-    "python", "java", "javascript", "typescript", "c++", "c#", "ruby", "php", "swift", "kotlin",
-    "go", "rust", "scala", "perl", "r", "matlab", "sql", "html", "css", "bash", "shell",
+# Ultra-short skill names that are real languages but also appear constantly as
+# ordinary letters/words. We only accept them when tech context is nearby.
+AMBIGUOUS_SHORT_SKILLS = {"r", "c", "go"}
 
-    # Frameworks & Libraries
-    "react", "angular", "vue", "nodejs", "express", "django", "flask", "fastapi", "spring boot",
-    "asp.net", "rails", "laravel", "tensorflow", "pytorch", "keras", "scikit-learn", "pandas",
-    "numpy", "jquery", "bootstrap", "tailwind css", "material ui", "next.js", "nuxt.js",
-
-    # Databases
-    "mysql", "postgresql", "mongodb", "redis", "elasticsearch", "cassandra", "dynamodb",
-    "oracle", "sql server", "sqlite", "mariadb", "couchdb", "neo4j", "firebase",
-
-    # Cloud & DevOps
-    "aws", "azure", "gcp", "google cloud", "docker", "kubernetes", "jenkins", "gitlab ci",
-    "github actions", "terraform", "ansible", "chef", "puppet", "circleci", "travis ci",
-
-    # Tools & Technologies
-    "git", "linux", "unix", "windows server", "nginx", "apache", "kafka", "rabbitmq",
-    "graphql", "rest api", "microservices", "agile", "scrum", "jira", "confluence",
-
-    # Soft Skills
-    "leadership", "communication", "problem solving", "team collaboration", "project management",
-    "analytical thinking", "critical thinking", "time management", "adaptability", "creativity",
-
-    # Other Technical
-    "machine learning", "deep learning", "natural language processing", "computer vision",
-    "data analysis", "data science", "business intelligence", "etl", "data warehousing",
-    "ci/cd", "test driven development", "unit testing", "integration testing", "api development"
-]
+# Words that, when near an ambiguous short skill, confirm it's the language.
+_TECH_CONTEXT_WORDS = {
+    "programming", "language", "languages", "developer", "engineer", "proficient",
+    "experience", "expertise", "coding", "scripting", "skills", "knowledge",
+    "fluent", "proficiency", "familiar", "familiarity", "stack", "lang",
+}
 
 
 class KeywordExtractor:
@@ -56,10 +36,17 @@ class KeywordExtractor:
                 logger.error("No spaCy model found. Using en_core_web_sm as fallback")
                 self.nlp = spacy.load("en_core_web_sm")
 
-        # Create phrase matcher for skills
+        # Create phrase matcher for skills. We match canonical skills AND their
+        # aliases/short forms; matched alias surface forms are resolved back to
+        # the canonical name in _extract_skills, so "k8s" is reported as
+        # "kubernetes".
         from spacy.matcher import PhraseMatcher
         self.skill_matcher = PhraseMatcher(self.nlp.vocab, attr="LOWER")
-        skill_patterns = [self.nlp.make_doc(skill.lower()) for skill in SKILLS_DATABASE]
+        surface_forms = set(SKILLS_DATABASE) | set(SKILL_ALIASES.keys())
+        # Single-token surface forms, used to detect when an ambiguous short
+        # skill sits in a list of other skills (e.g. "C, Python, Go").
+        self._known_surface_forms = {f for f in surface_forms if " " not in f}
+        skill_patterns = [self.nlp.make_doc(form) for form in surface_forms]
         self.skill_matcher.add("SKILLS", skill_patterns)
 
         # TF-IDF vectorizer for keyword extraction
@@ -149,18 +136,40 @@ class KeywordExtractor:
     def _extract_skills(self, doc) -> Set[str]:
         """Extract skills using the curated phrase matcher.
 
-        Only known skills from SKILLS_DATABASE are returned. Noun-chunk scanning
-        was removed because it pulled in noise like "a senior python engineer"
-        whenever a chunk merely contained a skill substring.
+        Only known skills (and their aliases) are returned. Alias surface forms
+        like "k8s" or "postgres" are resolved to their canonical name. Noun-chunk
+        scanning was removed because it pulled in noise like "a senior python
+        engineer" whenever a chunk merely contained a skill substring.
         """
         skills = set()
 
         matches = self.skill_matcher(doc)
         for match_id, start, end in matches:
-            skill = doc[start:end].text.lower()
-            skills.add(skill)
+            surface = doc[start:end].text.lower()
+            canonical = SKILL_ALIASES.get(surface, surface)
+            if canonical in AMBIGUOUS_SHORT_SKILLS and not self._has_tech_context(doc, start, end):
+                continue
+            skills.add(canonical)
 
         return skills
+
+    def _has_tech_context(self, doc, start: int, end: int) -> bool:
+        """True if an ambiguous short skill (r/c/go) at doc[start:end] is
+        surrounded by tech context: a context word, or an adjacent token that is
+        itself a known skill (e.g. a comma-separated list "C, Python, Go")."""
+        window = 4
+        lo = max(0, start - window)
+        hi = min(len(doc), end + window)
+        for i in range(lo, hi):
+            if start <= i < end:
+                continue
+            tok = doc[i].text.lower()
+            if tok in _TECH_CONTEXT_WORDS:
+                return True
+            # Neighbor is another recognised skill/alias -> looks like a tech list.
+            if tok in self._known_surface_forms:
+                return True
+        return False
 
     def _extract_tfidf_keywords(self, text: str) -> List[Tuple[str, float]]:
         """Extract keywords using TF-IDF"""
@@ -224,52 +233,114 @@ class KeywordExtractor:
 
         return info
 
+    # Cue phrases that mark a line/section as required vs preferred.
+    _REQUIRED_CUES = [
+        "must have", "must-have", "required", "requirement", "essential",
+        "mandatory", "you have", "you'll need", "what you need", "qualifications",
+        "minimum qualifications", "basic qualifications", "we require",
+    ]
+    _PREFERRED_CUES = [
+        "nice to have", "nice-to-have", "preferred", "bonus", "a plus", "plus",
+        "desired", "desirable", "ideally", "would be great", "good to have",
+        "familiarity with", "exposure to", "advantageous", "pluses",
+    ]
+
     def _categorize_skills(self, text: str, skills: Set[str]) -> Tuple[Set[str], Set[str]]:
-        """Categorize skills into required vs preferred"""
-        required = set()
-        preferred = set()
+        """Categorize skills into required vs preferred.
 
-        text_lower = text.lower()
+        Classification is *scoped*: it looks at the line a skill appears on and
+        the section header above it, rather than running ".*" across the whole
+        document (which falsely tagged a skill "required" whenever the word
+        "required" appeared anywhere). A skill seen in any required context wins
+        over preferred; skills with no cue default to required (unchanged
+        behaviour, so ATS scoring stays stable).
+        """
+        required: Set[str] = set()
+        preferred: Set[str] = set()
 
-        # Simple heuristic: check context around skill mentions
+        segments = self._segment_lines(text)  # list of (section_class, line_lower)
+
         for skill in skills:
-            # Check if skill appears near "required" or "must have"
-            required_patterns = [
-                f"required.*{skill}", f"{skill}.*required",
-                f"must have.*{skill}", f"{skill}.*must have",
-                f"essential.*{skill}", f"{skill}.*essential"
-            ]
+            classes: Set[str] = set()
+            for section_class, line in segments:
+                if not self._line_contains_skill(line, skill):
+                    continue
+                cue = self._line_cue(line) or section_class
+                if cue:
+                    classes.add(cue)
 
-            # Check if skill appears near "preferred" or "nice to have"
-            preferred_patterns = [
-                f"preferred.*{skill}", f"{skill}.*preferred",
-                f"nice to have.*{skill}", f"{skill}.*nice to have",
-                f"bonus.*{skill}", f"{skill}.*bonus"
-            ]
-
-            is_required = any(re.search(pattern, text_lower) for pattern in required_patterns)
-            is_preferred = any(re.search(pattern, text_lower) for pattern in preferred_patterns)
-
-            if is_required:
+            if "required" in classes:
                 required.add(skill)
-            elif is_preferred:
+            elif "preferred" in classes:
                 preferred.add(skill)
             else:
-                # Default to required if not specified
-                required.add(skill)
+                required.add(skill)  # default unchanged
 
         return required, preferred
 
-    def _extract_technologies(self, skills: Set[str]) -> List[str]:
-        """Extract technologies from skills set"""
-        tech_keywords = [
-            "python", "java", "javascript", "react", "angular", "vue", "docker", "kubernetes",
-            "aws", "azure", "gcp", "mongodb", "postgresql", "mysql", "redis", "kafka",
-            "tensorflow", "pytorch", "django", "flask", "fastapi", "nodejs", "express"
-        ]
+    def _segment_lines(self, text: str) -> List[Tuple[str, str]]:
+        """Split text into (section_class, lowercased_line) pairs.
 
-        technologies = [skill for skill in skills if any(tech in skill.lower() for tech in tech_keywords)]
-        return technologies
+        A line that looks like a section header (short, cue-bearing, often ending
+        with ':') sets the active section class for the lines beneath it until the
+        next header. section_class is "required", "preferred", or "" (none).
+        """
+        segments: List[Tuple[str, str]] = []
+        active = ""
+        for raw_line in text.splitlines():
+            line = raw_line.strip().lower()
+            if not line:
+                continue
+
+            header_class = self._header_class(line)
+            if header_class is not None:
+                active = header_class
+                # A header line itself rarely contains skills; still scan it.
+                segments.append((active, line))
+                continue
+
+            segments.append((active, line))
+        return segments
+
+    def _header_class(self, line: str) -> str | None:
+        """Return "required"/"preferred"/"" if the line is a section header, else None."""
+        # Headers are short and typically end with ':' or are title-like.
+        is_headerish = len(line) <= 60 and (line.endswith(":") or len(line.split()) <= 6)
+        if not is_headerish:
+            return None
+        if any(cue in line for cue in self._PREFERRED_CUES):
+            return "preferred"
+        if any(cue in line for cue in self._REQUIRED_CUES):
+            return "required"
+        return None
+
+    def _line_cue(self, line: str) -> str:
+        """Return the cue class implied by a single line, or "" if none.
+
+        Preferred cues are checked first so a phrase like "X is a plus" is not
+        swallowed by an unrelated required cue elsewhere on the line.
+        """
+        if any(cue in line for cue in self._PREFERRED_CUES):
+            return "preferred"
+        if any(cue in line for cue in self._REQUIRED_CUES):
+            return "required"
+        return ""
+
+    @staticmethod
+    def _line_contains_skill(line: str, skill: str) -> bool:
+        """Whole-token containment check so 'go'/'r'/'c' don't match substrings."""
+        return re.search(
+            r"(?<![a-z0-9+#.])" + re.escape(skill) + r"(?![a-z0-9+#])",
+            line,
+        ) is not None
+
+    def _extract_technologies(self, skills: Set[str]) -> List[str]:
+        """Return the subset of extracted skills that are technologies.
+
+        Uses the curated TECH_SKILLS set (everything except soft skills) instead
+        of a tiny hard-coded list, so e.g. terraform, svelte, snowflake all count.
+        """
+        return [skill for skill in skills if skill.lower() in TECH_SKILLS]
 
     def _extract_certifications(self, text: str) -> List[str]:
         """Extract certifications from resume"""

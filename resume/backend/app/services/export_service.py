@@ -262,16 +262,18 @@ class ExportService:
     def _build_docx_classic(self, doc: Document, resume_data: Dict):
         """Build classic DOCX template"""
         # Name
-        name_para = doc.add_paragraph(resume_data.get("name", ""))
+        name_para = doc.add_paragraph(resume_data.get("name") or "")
         name_para.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
-        name_para.runs[0].font.size = Pt(16)
-        name_para.runs[0].font.bold = True
+        if name_para.runs:
+            name_para.runs[0].font.size = Pt(16)
+            name_para.runs[0].font.bold = True
 
         # Contact
         contact = self._format_contact(resume_data)
         contact_para = doc.add_paragraph(contact)
         contact_para.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
-        contact_para.runs[0].font.size = Pt(10)
+        if contact_para.runs:
+            contact_para.runs[0].font.size = Pt(10)
 
         doc.add_paragraph()  # Blank line
 
