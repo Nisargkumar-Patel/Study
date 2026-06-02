@@ -36,6 +36,10 @@ export interface OptimizeChanges {
     before: string
     after: string
   }[]
+  terminology_aligned: {
+    before: string
+    after: string
+  }[]
 }
 
 export interface AutoOptimizeResponse {

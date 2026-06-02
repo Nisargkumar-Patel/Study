@@ -7,13 +7,14 @@ export function SideBySideEditor() {
   const {
     originalResume,
     optimizedResume,
+    currentResume,
     optimizeChanges,
     scoreBefore,
     scoreAfter,
     passesAts,
     passThreshold,
     isLoading,
-    autoOptimize,
+    useOriginalResume,
   } = useResumeStore()
 
   if (!originalResume) {
@@ -28,11 +29,22 @@ export function SideBySideEditor() {
   const after = scoreAfter?.overall_score ?? null
   const delta = before != null && after != null ? Math.round((after - before) * 10) / 10 : null
 
+  // Count of automatic improvements applied to the original.
+  const improvementCount = optimizeChanges
+    ? optimizeChanges.skills_added.length +
+      optimizeChanges.summary_keywords_added.length +
+      optimizeChanges.bullets_strengthened.length +
+      (optimizeChanges.terminology_aligned?.length ?? 0)
+    : 0
+
+  // Whether the user is currently exporting the original (reverted) version.
+  const usingOriginal = currentResume === originalResume
+
   return (
     <div className="space-y-4">
       {/* Status bar */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           {passesAts != null && (
             <span
               className={
@@ -54,10 +66,12 @@ export function SideBySideEditor() {
               <span className="text-xs"> · pass mark {passThreshold}%</span>
             </span>
           )}
+          {improvementCount > 0 && (
+            <span className="px-2 py-0.5 rounded-full text-xs bg-primary/10 text-primary">
+              {improvementCount} auto-improvement{improvementCount > 1 ? 's' : ''} applied
+            </span>
+          )}
         </div>
-        <Button size="sm" variant="outline" onClick={autoOptimize} disabled={isLoading}>
-          {isLoading ? 'Optimizing…' : 'Re-run optimization'}
-        </Button>
       </div>
 
       {/* What the optimizer changed */}
@@ -84,13 +98,21 @@ export function SideBySideEditor() {
                 {optimizeChanges.bullets_strengthened.length > 1 ? 's' : ''}.
               </p>
             )}
-            {optimizeChanges.skills_added.length === 0 &&
-              optimizeChanges.summary_keywords_added.length === 0 &&
-              optimizeChanges.bullets_strengthened.length === 0 && (
-                <p className="text-muted-foreground">
-                  No changes needed — your resume already covers this job well.
-                </p>
-              )}
+            {(optimizeChanges.terminology_aligned?.length ?? 0) > 0 && (
+              <p>
+                <span className="text-muted-foreground">
+                  Aligned wording to the job description:{' '}
+                </span>
+                {optimizeChanges.terminology_aligned
+                  .map((t) => `${t.before} → ${t.after}`)
+                  .join(', ')}
+              </p>
+            )}
+            {improvementCount === 0 && (
+              <p className="text-muted-foreground">
+                No changes needed — your resume already covers this job well.
+              </p>
+            )}
             <p className="text-muted-foreground pt-1">
               Only truthful edits are applied — no fabricated jobs, dates, or metrics. Education
               and experience history are preserved exactly as uploaded.
@@ -114,20 +136,42 @@ export function SideBySideEditor() {
         </Card>
 
         {/* Auto-optimized — read-only */}
-        <Card>
+        <Card className={usingOriginal ? '' : 'ring-2 ring-primary/30'}>
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm">
-              Updated Resume{' '}
-              <span className="font-normal text-muted-foreground">
-                (auto-optimized — this is what exports)
-              </span>
-            </CardTitle>
+            <div className="flex items-center justify-between gap-2">
+              <CardTitle className="text-sm">
+                Your Final Resume{' '}
+                <span className="font-normal text-muted-foreground">(this is what gets exported)</span>
+              </CardTitle>
+            </div>
+            {improvementCount > 0 && (
+              <div className="flex items-center gap-2 mt-2">
+                <Button
+                  size="sm"
+                  variant={usingOriginal ? 'outline' : 'default'}
+                  onClick={() => {
+                    if (optimizedResume) useOriginalResume(false)
+                  }}
+                  disabled={!usingOriginal}
+                >
+                  Use optimized
+                </Button>
+                <Button
+                  size="sm"
+                  variant={usingOriginal ? 'default' : 'outline'}
+                  onClick={() => useOriginalResume(true)}
+                  disabled={usingOriginal}
+                >
+                  Use original instead
+                </Button>
+              </div>
+            )}
           </CardHeader>
           <CardContent className="max-h-[640px] overflow-y-auto pr-1">
-            {optimizedResume ? (
+            {currentResume ? (
               <ResumeView
-                resume={optimizedResume}
-                highlightSkills={optimizeChanges?.skills_added ?? []}
+                resume={currentResume}
+                highlightSkills={usingOriginal ? [] : optimizeChanges?.skills_added ?? []}
               />
             ) : (
               <div className="text-center py-8 text-muted-foreground text-sm">

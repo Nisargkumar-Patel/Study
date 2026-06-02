@@ -1,6 +1,7 @@
 """Tests for the auto-optimizer: it must improve the ATS score using only
 truthful transformations, and never fabricate experience or numbers."""
 
+import re
 import pytest
 
 from app.services.resume_optimizer import get_resume_optimizer
@@ -112,6 +113,58 @@ def test_score_improves_after_optimization(optimizer, scorer):
     assert after.overall_score >= before.overall_score
     # With all required skills added, skills match should be high.
     assert after.skills_match.percentage >= before.skills_match.percentage
+
+
+def test_terminology_aligned_to_jd_wording(optimizer):
+    """Resume synonyms get rewritten to the JD's exact wording (truthful — same
+    tech, already present), in experience bullets."""
+    job = _job(required_skills=["JavaScript", "Kubernetes", "PostgreSQL"],
+               keywords=["javascript", "kubernetes"])
+    resume = {
+        "name": "T", "summary": "Dev.",
+        "experience": [{
+            "title": "Engineer", "company": "Acme",
+            "start_date": "2021", "end_date": "2024",
+            "bullets": [
+                "Built services in JS deployed on k8s.",
+                "Managed Postgres databases.",
+            ],
+        }],
+        "education": [], "skills": ["JS", "k8s", "Postgres"],
+        "certifications": [], "projects": [],
+    }
+    optimized, changes = optimizer.build_optimized_resume(resume, job)
+    joined = " ".join(optimized["experience"][0]["bullets"])
+
+    # Variants rewritten to JD wording.
+    assert "JavaScript" in joined
+    assert "Kubernetes" in joined
+    assert "PostgreSQL" in joined
+    # Old variants gone.
+    assert not re.search(r"\bJS\b", joined)
+    assert "k8s" not in joined
+    assert "Postgres " not in joined  # "PostgreSQL" is fine; bare "Postgres" gone
+    assert len(changes["terminology_aligned"]) >= 3
+
+
+def test_terminology_alignment_does_not_invent_terms(optimizer):
+    """A JD term with no synonym present in the resume must NOT be injected
+    into bullets."""
+    job = _job(required_skills=["Rust", "Terraform"], keywords=["rust"])
+    resume = {
+        "name": "T", "summary": "Dev.",
+        "experience": [{
+            "title": "Engineer", "company": "Acme",
+            "start_date": "2021", "end_date": "2024",
+            "bullets": ["Built web apps in Python."],
+        }],
+        "education": [], "skills": ["Python"], "certifications": [], "projects": [],
+    }
+    optimized, _ = optimizer.build_optimized_resume(resume, job)
+    joined = " ".join(optimized["experience"][0]["bullets"])
+    # Rust/Terraform are not synonyms of anything in the bullet -> not inserted.
+    assert "Rust" not in joined
+    assert "Terraform" not in joined
 
 
 def test_original_resume_is_not_mutated(optimizer):

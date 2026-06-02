@@ -84,6 +84,9 @@ interface ResumeState {
   setLoading: (loading: boolean) => void
   setError: (error: string | null) => void
 
+  // Switch the exported resume between the optimized and original versions.
+  useOriginalResume: (useOriginal: boolean) => void
+
   // Async actions
   uploadResume: (file: File) => Promise<void>
   uploadLatex: (latex: string) => Promise<void>
@@ -208,6 +211,12 @@ export const useResumeStore = create<ResumeState>()(
       setCoverLetterEnabled: (enabled) => set({ coverLetterEnabled: enabled }),
 
       setCoverLetter: (text) => set({ coverLetter: text }),
+
+      useOriginalResume: (useOriginal) =>
+        set((state) => ({
+          currentResume: useOriginal ? state.originalResume : state.optimizedResume,
+          atsScore: useOriginal ? state.scoreBefore : state.scoreAfter,
+        })),
 
       setCurrentStep: (step) => set({ currentStep: step }),
 
