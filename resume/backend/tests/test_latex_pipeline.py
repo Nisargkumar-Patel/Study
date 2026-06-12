@@ -126,6 +126,106 @@ def test_latex_export_generates_template_when_no_source():
     assert "SQL, Python, Tableau" in out_tex
 
 
+# A plain `article`-class resume (NOT moderncv): centered name, \textbf/\textit
+# headers, itemize bullets, and category-labelled plain-text skills. This is the
+# common "any LaTeX format" case that used to degrade badly.
+ARTICLE_TEX = r"""\documentclass[10pt,letterpaper]{article}
+\usepackage[margin=0.5in]{geometry}
+\usepackage{enumitem}
+\usepackage{xcolor}
+
+\begin{document}
+
+\begin{center}
+    {\LARGE\bfseries\color{primary} NISARGKUMAR PATEL}\\[4pt]
+    \small +1 343-558-5184 \,|\, Ottawa, ON, Canada \,|\, njpatel944@gmail.com \,|\, \href{https://www.linkedin.com/in/nisargkumar-patel/}{LinkedIn}
+\end{center}
+
+\section{PROFESSIONAL SUMMARY}
+Versatile \textbf{Software Developer} with hands-on expertise in Python scripting.
+
+\section{TECHNICAL SKILLS}
+\noindent
+\textbf{Programming \& Scripting:} Python, C, SQL \quad
+\textbf{DevOps \& Tools:} CI/CD (Jenkins/GitLab), Git, JIRA, Linux\\[2pt]
+\textbf{Soft Skills:} Technical Documentation, Root Cause Analysis
+
+\section{PROFESSIONAL EXPERIENCE}
+
+\noindent
+\textbf{Software Developer / QA Automation Engineer} \hfill \textit{Jan 2025 -- Jul 2025}\\
+\textit{Light Heart Vision}
+\begin{itemize}[noitemsep, topsep=2pt, leftmargin=12pt]
+    \item Architected automated testing frameworks using \textbf{Python and Pytest}.
+    \item Automated regression testing, \textbf{reducing manual efforts by 40\%}.
+\end{itemize}
+
+\section{EDUCATION}
+
+\noindent
+\textbf{Computer Engineering Technology} \hfill \textit{Graduated Aug 2025}\\
+\textit{Algonquin College} | Relevant Coursework: Systems Programming
+
+\end{document}
+"""
+
+
+def test_article_template_extracts_structure():
+    """The plain article template must NOT degrade: real name (not 'center'),
+    clean titles/companies/dates, category-stripped skills, classified education.
+    """
+    parsed = LatexParser().parse(ARTICLE_TEX)
+    data = parsed.data
+
+    # Name must come from the centered header, not `\begin{center}`.
+    assert data.name == "NISARGKUMAR PATEL"
+    assert data.email == "njpatel944@gmail.com"
+    assert data.location and "Ottawa" in data.location
+
+    # Experience: title/company split, dates parsed, NO itemize options leaked.
+    assert len(data.experience) == 1
+    exp = data.experience[0]
+    assert exp.title == "Software Developer / QA Automation Engineer"
+    assert exp.company == "Light Heart Vision"
+    assert exp.start_date == "Jan 2025"
+    assert exp.end_date == "Jul 2025"
+    joined = " | ".join(exp.bullets)
+    assert "noitemsep" not in joined and "leftmargin" not in joined
+    assert "reducing manual efforts by 40%" in joined
+
+    # Skills: category labels and `\\[2pt]` stripped.
+    skills_lower = {s.lower() for s in data.skills}
+    assert {"python", "git", "ci/cd (jenkins/gitlab)", "linux"} <= skills_lower
+    assert not any(":" in s for s in data.skills)
+    assert not any("[2pt]" in s for s in data.skills)
+
+    # Education: degree vs institution classified correctly (not swapped).
+    assert len(data.education) == 1
+    edu = data.education[0]
+    assert "Algonquin College" in edu.institution
+    assert "Engineering Technology" in edu.degree
+
+
+def test_article_template_added_skill_is_visible_not_a_comment():
+    """A newly-added skill must render in the PDF, not hide in a `%` comment."""
+    parser = LatexParser()
+    parsed = parser.parse(ARTICLE_TEX)
+    original = _to_dict(parsed.data)
+
+    updated = _to_dict(parsed.data)
+    updated["skills"].append("Kubernetes")
+
+    out = LatexExporter().export(updated, original=original)
+
+    # Structure preserved.
+    assert out.count("\\begin{document}") == 1
+    assert out.count("\\section") == ARTICLE_TEX.count("\\section")
+    # The skill appears on a NON-comment line (visible in the compiled PDF).
+    visible = [ln for ln in out.splitlines()
+               if "Kubernetes" in ln and not ln.lstrip().startswith("%")]
+    assert visible, "added skill must be on a visible (non-comment) line"
+
+
 def test_docx_export_handles_missing_contact_fields():
     """Regression: empty contact line used to crash with IndexError because
     `add_paragraph("")` produces a paragraph with no runs."""
