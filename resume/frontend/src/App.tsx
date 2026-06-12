@@ -6,14 +6,13 @@ import { ResumeUploader } from '@/components/upload/ResumeUploader'
 import { JobDescriptionInput } from '@/components/analysis/JobDescriptionInput'
 import { ATSScoreCard } from '@/components/analysis/ATSScoreCard'
 import { SideBySideEditor } from '@/components/editor/SideBySideEditor'
-import { TemplateSelector } from '@/components/templates/TemplateSelector'
 import { ExportOptions } from '@/components/export/ExportOptions'
 import { CoverLetterCard } from '@/components/export/CoverLetterCard'
 import { Button } from '@/components/ui/button'
 
 function AppContent() {
   const [darkMode, setDarkMode] = useState(true)
-  const { currentStep, error, setError } = useResumeStore()
+  const { currentStep, error, setError, setCurrentStep } = useResumeStore()
 
   useEffect(() => {
     if (darkMode) {
@@ -88,13 +87,15 @@ function AppContent() {
                   <ATSScoreCard />
                 </div>
               </div>
+              <div className="flex justify-end">
+                <Button onClick={() => setCurrentStep(3)}>Continue to Export →</Button>
+              </div>
             </div>
           )}
 
           {/* Step 3: Export */}
           {currentStep === 3 && (
             <div className="space-y-6 max-w-4xl mx-auto">
-              <TemplateSelector />
               <ExportOptions />
               <CoverLetterCard />
               <ATSScoreCard />

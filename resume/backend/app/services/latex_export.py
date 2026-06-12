@@ -124,10 +124,64 @@ class LatexExporter:
             if joined_old in out:
                 out = out.replace(joined_old, joined_new, 1)
             else:
-                # Fallback: append a comment near the end of the document.
-                out = self._append_skills_comment(out, new_skills)
+                # The skills don't appear as one verbatim list (templates split
+                # them across categories). Inject the genuinely-new skills as a
+                # VISIBLE line so they render in the PDF and the ATS sees them.
+                added = [s for s in new_skills if s not in old_skills]
+                if added:
+                    out = self._inject_skills_visibly(out, added)
 
         return out
+
+    _SKILLS_SECTION_RE = re.compile(
+        r"\\section\*?\{([^}]+)\}", re.IGNORECASE
+    )
+
+    def _skills_section_span(self, source: str):
+        """Return the (start, end) char span of the skills section body."""
+        matches = list(self._SKILLS_SECTION_RE.finditer(source))
+        for idx, m in enumerate(matches):
+            if re.search(r"skill|competenc|technolog|expertise", m.group(1), re.IGNORECASE):
+                start = m.end()
+                if idx + 1 < len(matches):
+                    end = matches[idx + 1].start()
+                else:
+                    ed = source.find("\\end{document}", start)
+                    end = ed if ed != -1 else len(source)
+                return start, end
+        return None
+
+    def _inject_skills_visibly(self, source: str, added: List[str]) -> str:
+        """Add newly-introduced skills into the visible skills section.
+
+        Falls back to a comment only if there is no skills section at all.
+        """
+        if not added:
+            return source
+        payload = ", ".join(_patch_escape(s) for s in added)
+        span = self._skills_section_span(source)
+        if not span:
+            return self._append_skills_comment(source, added)
+        start, end = span
+        body = source[start:end]
+
+        # itemize-based skills: insert a new \item inside the list.
+        close = body.rfind("\\end{itemize}")
+        if close != -1:
+            insert_at = start + close
+            addition = "    \\item \\textbf{Additional Skills:} " + payload + "\n"
+            return source[:insert_at] + addition + source[insert_at:]
+
+        # Plain-text skills section: append a visible line right after the real
+        # content, before any trailing blank lines or section-divider comments.
+        trimmed = body.rstrip()
+        body_lines = trimmed.split("\n")
+        while body_lines and body_lines[-1].lstrip().startswith("%"):
+            body_lines.pop()
+        trimmed = "\n".join(body_lines).rstrip()
+        insert_at = start + len(trimmed)
+        addition = "\\\\\n\\noindent\\textbf{Additional Skills:} " + payload + "\n"
+        return source[:insert_at] + addition + source[insert_at:]
 
     @staticmethod
     def _replace_first(source: str, old: str, new: str) -> str:

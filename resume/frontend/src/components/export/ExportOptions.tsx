@@ -81,6 +81,16 @@ export function ExportOptions() {
         <CardTitle className="text-lg">Export Resume</CardTitle>
       </CardHeader>
       <CardContent>
+        {currentResume && (
+          <div className="mb-4 p-3 rounded-md bg-muted/50 text-xs">
+            <span className="font-medium">Exporting: </span>
+            {currentResume.name || 'Resume'} · {currentResume.experience.length} experience
+            {currentResume.experience.length === 1 ? '' : 's'} · {currentResume.skills.length} skills
+            {originalResume && currentResume === originalResume && (
+              <span className="text-amber-600 dark:text-amber-400"> · original (un-optimized) version</span>
+            )}
+          </div>
+        )}
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
           <Button
             variant="outline"

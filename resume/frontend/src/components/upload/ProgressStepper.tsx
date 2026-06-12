@@ -4,7 +4,7 @@ import { cn } from '@/utils/cn'
 const STEPS = [
   { label: 'Upload', description: 'Upload resume PDF' },
   { label: 'Analyze', description: 'Paste job description' },
-  { label: 'Optimize', description: 'Review suggestions' },
+  { label: 'Optimize', description: 'Auto-optimize for ATS' },
   { label: 'Export', description: 'Download resume' },
 ]
 

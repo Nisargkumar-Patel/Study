@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { ResumeData, JobData, ATSScore, OptimizeResponse } from '../types'
+import type { ResumeData, JobData, ATSScore, OptimizeResponse, AutoOptimizeResponse } from '../types'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
@@ -58,6 +58,17 @@ export const analysisApi = {
     jobData: JobData
   ): Promise<{ success: boolean; data: OptimizeResponse }> => {
     const response = await api.post('/analysis/optimize', {
+      resume_data: resumeData,
+      job_data: jobData,
+    })
+    return response.data
+  },
+
+  autoOptimize: async (
+    resumeData: ResumeData,
+    jobData: JobData
+  ): Promise<{ success: boolean; data: AutoOptimizeResponse }> => {
+    const response = await api.post('/analysis/auto-optimize', {
       resume_data: resumeData,
       job_data: jobData,
     })

@@ -1,11 +1,14 @@
 import re
 import uuid
-from typing import List, Dict, Set
+import copy
+from typing import List, Dict, Set, Tuple
 import spacy
 
 from app.models.suggestion import Suggestion, SuggestionType
 from app.utils.job_data import extract_keyword_strings
-from app.utils.text_normalizer import normalize_text, canonicalize, term_matches_text
+from app.utils.text_normalizer import (
+    normalize_text, canonicalize, term_matches_text, term_variants,
+)
 
 # Strong action verbs categorized by type
 ACTION_VERBS = {
@@ -31,6 +34,40 @@ WEAK_VERBS = {
     "used": ["utilized", "leveraged", "employed", "applied"],
     "got": ["achieved", "obtained", "secured", "acquired"]
 }
+
+# Preferred display casing for skills that would otherwise show up lowercased
+# (the JD/extractor works in lowercase). Anything not listed is title-cased,
+# except short all-caps acronyms which are upper-cased.
+SKILL_DISPLAY_CASE = {
+    "aws": "AWS", "gcp": "GCP", "ci/cd": "CI/CD", "ecs": "ECS", "eks": "ECS",
+    "s3": "S3", "sql": "SQL", "html": "HTML", "css": "CSS", "api": "API",
+    "rest": "REST", "rest api": "REST API", "graphql": "GraphQL",
+    "restful apis": "RESTful APIs", "nodejs": "Node.js", "node.js": "Node.js",
+    "next.js": "Next.js", "react": "React", "react.js": "React.js",
+    "vue.js": "Vue.js", "github actions": "GitHub Actions", "jira": "JIRA",
+    "postgresql": "PostgreSQL", "mongodb": "MongoDB", "mysql": "MySQL",
+    "dynamodb": "DynamoDB", "aws lambda": "AWS Lambda", "lambda": "Lambda",
+    "tcp/ip": "TCP/IP", "ios": "iOS", "macos": "macOS", "kubernetes": "Kubernetes",
+    "docker": "Docker", "redis": "Redis", "kafka": "Kafka", "django": "Django",
+    "flask": "Flask", "fastapi": "FastAPI", "python": "Python", "java": "Java",
+    "javascript": "JavaScript", "typescript": "TypeScript", "terraform": "Terraform",
+}
+
+
+def _display_skill(skill: str) -> str:
+    """Return a presentable casing for a (possibly lowercase) skill string."""
+    s = skill.strip()
+    key = s.lower()
+    if key in SKILL_DISPLAY_CASE:
+        return SKILL_DISPLAY_CASE[key]
+    # Preserve a value that already has mixed/intentional casing.
+    if s != key:
+        return s
+    # Short tokens with no vowels are likely acronyms -> upper-case.
+    if len(s) <= 4 and not (set("aeiou") & set(key)):
+        return s.upper()
+    return s[:1].upper() + s[1:]
+
 
 # Metric patterns to suggest
 METRIC_SUGGESTIONS = [
@@ -81,6 +118,196 @@ class ResumeOptimizer:
         suggestions.sort(key=lambda x: x.impact, reverse=True)
 
         return suggestions
+
+    def build_optimized_resume(self, resume_data: Dict, job_data: Dict) -> Tuple[Dict, Dict]:
+        """Auto-generate an ATS-optimized version of the resume.
+
+        Applies only SAFE, non-fabricating transformations so the result stays
+        truthful to what the candidate actually uploaded:
+
+          1. Skills: append any JD-required skills that are missing, into the
+             real skills list (this is the highest-signal ATS lever).
+          2. Summary: weave missing JD keywords the candidate plausibly has
+             (i.e. that also appear as JD-required skills now in their skills
+             list) into the professional summary, naturally.
+          3. Experience bullets: upgrade weak verbs ("responsible for" -> "led")
+             in EXISTING bullets only. No invented bullets, no fake metrics.
+
+        It deliberately does NOT invent jobs, dates, degrees, or numbers.
+
+        Returns (optimized_resume, change_report) where change_report lists the
+        concrete edits made, for display in the UI.
+        """
+        optimized = copy.deepcopy(resume_data)
+        changes = {
+            "skills_added": [],
+            "summary_keywords_added": [],
+            "bullets_strengthened": [],
+            "terminology_aligned": [],
+        }
+
+        missing_skills = self._get_missing_skills(resume_data, job_data)
+        missing_keywords = self._get_missing_keywords(resume_data, job_data)
+
+        # --- 0. Terminology alignment (experience + projects) ----------------
+        # Where the resume already uses a SYNONYM/variant of a term the JD uses
+        # (e.g. resume "JS"/"k8s"/"Postgres" vs JD "JavaScript"/"Kubernetes"/
+        # "PostgreSQL"), rewrite it to the JD's exact wording. This is truthful —
+        # same technology, already present — and helps ATS systems that do exact
+        # string matching. We never insert a term that isn't already represented.
+        jd_term_forms = self._jd_preferred_forms(job_data)
+        self._align_terminology(optimized, jd_term_forms, changes)
+
+        # --- 1. Skills: add missing required skills -------------------------
+        existing_canon = {canonicalize(s) for s in optimized.get("skills", [])}
+        skills_list = list(optimized.get("skills", []))
+        for skill in missing_skills:
+            if canonicalize(skill) not in existing_canon:
+                display = _display_skill(skill)
+                skills_list.append(display)
+                existing_canon.add(canonicalize(skill))
+                changes["skills_added"].append(display)
+        optimized["skills"] = skills_list
+
+        # --- 2. Summary: weave in missing keywords --------------------------
+        # Only add keywords that are now backed by the skills section, so we
+        # never claim something the resume doesn't otherwise support.
+        backed = {canonicalize(s) for s in skills_list}
+        summary = optimized.get("summary") or ""
+        added_to_summary: List[str] = []
+        # Prefer keywords that are real skills the candidate has/added.
+        candidate_kws = [
+            kw for kw in missing_keywords
+            if canonicalize(kw) in backed and kw.lower() not in summary.lower()
+        ]
+        # De-duplicate by canonical form, keep order.
+        seen = set()
+        ordered_kws = []
+        for kw in candidate_kws:
+            c = canonicalize(kw)
+            if c not in seen:
+                seen.add(c)
+                ordered_kws.append(kw)
+
+        if ordered_kws:
+            display_kws = [_display_skill(k) for k in ordered_kws[:6]]
+            phrase = self._format_keyword_phrase(display_kws)
+            if summary.strip():
+                connector = " " if summary.strip().endswith(".") else ". "
+                optimized["summary"] = summary.rstrip() + connector + \
+                    f"Core technical strengths include {phrase}."
+            else:
+                optimized["summary"] = f"Results-driven professional with hands-on expertise in {phrase}."
+            added_to_summary = display_kws
+        changes["summary_keywords_added"] = added_to_summary
+
+        # --- 3. Experience: strengthen weak verbs in existing bullets -------
+        for i, exp in enumerate(optimized.get("experience", [])):
+            new_bullets = []
+            for j, bullet in enumerate(exp.get("bullets", [])):
+                improved = self._strengthen_verbs(bullet)
+                if improved != bullet:
+                    changes["bullets_strengthened"].append({
+                        "experience_index": i,
+                        "bullet_index": j,
+                        "before": bullet,
+                        "after": improved,
+                    })
+                new_bullets.append(improved)
+            exp["bullets"] = new_bullets
+
+        return optimized, changes
+
+    def _jd_preferred_forms(self, job_data: Dict) -> Dict[str, str]:
+        """Map canonical-term -> the JD's preferred surface form.
+
+        For each skill/keyword the JD uses, record the exact wording the JD
+        wrote it as, keyed by canonical form. Used to rewrite resume synonyms to
+        match the JD's phrasing.
+        """
+        forms: Dict[str, str] = {}
+        # Required + preferred skills carry the JD's own casing/wording.
+        kw = job_data.get("keywords", {})
+        terms: List[str] = []
+        if isinstance(kw, dict):
+            terms += list(kw.get("required_skills", []))
+            terms += list(kw.get("preferred_skills", []))
+            terms += list(kw.get("all_skills", []))
+        for term in terms:
+            if not term:
+                continue
+            canon = canonicalize(term)
+            # Present the term with proper casing (the analyze endpoint stores
+            # skills lowercased; we don't want "javascript"/"aws" in bullets).
+            if canon not in forms:
+                forms[canon] = _display_skill(term.strip())
+        return forms
+
+    def _align_terminology(self, resume: Dict, jd_forms: Dict[str, str], changes: Dict) -> None:
+        """Rewrite synonym variants in experience & project bullets to the JD's
+        wording. Mutates ``resume`` and appends to ``changes['terminology_aligned']``."""
+        if not jd_forms:
+            return
+
+        def rewrite(text: str) -> str:
+            for canon, jd_form in jd_forms.items():
+                jd_lower = jd_form.lower()
+                # Variants of this term, written in the resume but NOT already in
+                # the JD's exact wording.
+                for variant in term_variants(canon):
+                    if variant == jd_lower:
+                        continue
+                    # Whole-token, case-insensitive match of the variant.
+                    pattern = r"(?<![A-Za-z0-9+#.])" + re.escape(variant) + r"(?![A-Za-z0-9+#])"
+                    m = re.search(pattern, text, re.IGNORECASE)
+                    if m and m.group(0).lower() != jd_lower:
+                        text = text[:m.start()] + jd_form + text[m.end():]
+                        changes["terminology_aligned"].append({
+                            "before": m.group(0), "after": jd_form,
+                        })
+                        # Only one rewrite per term per pass to avoid churn.
+            return text
+
+        for exp in resume.get("experience", []):
+            exp["bullets"] = [rewrite(b) for b in exp.get("bullets", [])]
+            if exp.get("description"):
+                exp["description"] = rewrite(exp["description"])
+
+        for proj in resume.get("projects", []):
+            if isinstance(proj, dict):
+                if proj.get("description"):
+                    proj["description"] = rewrite(proj["description"])
+                if isinstance(proj.get("bullets"), list):
+                    proj["bullets"] = [rewrite(b) for b in proj["bullets"]]
+
+    def _strengthen_verbs(self, bullet: str) -> str:
+        """Replace the first weak verb/phrase in a bullet with a strong verb.
+
+        Capitalizes the replacement if it starts the bullet. Only the first
+        match is replaced to avoid over-editing a single line.
+        """
+        for weak, strong_alternatives in WEAK_VERBS.items():
+            pattern = r'\b' + re.escape(weak) + r'\b'
+            m = re.search(pattern, bullet, re.IGNORECASE)
+            if m:
+                replacement = strong_alternatives[0]
+                # Match capitalization of the original occurrence.
+                if m.group(0)[:1].isupper():
+                    replacement = replacement[:1].upper() + replacement[1:]
+                return re.sub(pattern, replacement, bullet, count=1, flags=re.IGNORECASE)
+        return bullet
+
+    @staticmethod
+    def _format_keyword_phrase(keywords: List[str]) -> str:
+        """Join keywords into a readable phrase: 'a, b, and c'."""
+        kws = [k.strip() for k in keywords if k.strip()]
+        if not kws:
+            return ""
+        if len(kws) == 1:
+            return kws[0]
+        if len(kws) == 2:
+            return f"{kws[0]} and {kws[1]}"
+        return ", ".join(kws[:-1]) + f", and {kws[-1]}"
 
     def _optimize_summary(self, resume_data: Dict, missing_keywords: List[str],
                          missing_skills: List[str]) -> List[Suggestion]:

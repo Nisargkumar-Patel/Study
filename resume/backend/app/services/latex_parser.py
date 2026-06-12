@@ -56,6 +56,13 @@ _ADDRESS_CMD_RE = re.compile(r"\\(?:address|location)\{([^}]+)\}")
 _EMAIL_RE = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b")
 _PHONE_RE = re.compile(r"(?:\+?\d{1,3}[\s-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}")
 _LINKEDIN_RE = re.compile(r"linkedin\.com/in/[\w-]+", re.IGNORECASE)
+# "City, ON" / "City, Ontario" / "City, ST, Canada" — Canadian/US style.
+_LOCATION_RE = re.compile(
+    r"\b[A-Z][a-zA-Z.]+(?:\s[A-Z][a-zA-Z.]+)?,\s*"
+    r"(?:ON|BC|AB|QC|NS|NB|MB|SK|PE|NL|YT|NT|NU|[A-Z]{2}|"
+    r"Ontario|Quebec|Alberta|Manitoba|California|Toronto|Texas|Washington)"
+    r"(?:,\s*[A-Z][a-zA-Z]+)?\b"
+)
 _ITEM_RE = re.compile(r"\\item\b\s*(.*?)(?=\\item\b|\\end\{|\Z)", re.DOTALL)
 
 
@@ -127,6 +134,12 @@ class LatexParser:
         m = re.search(r"\\author\{([^}]+)\}", src)
         if m:
             return self._clean(m.group(1))
+        # Centered header block: {\LARGE ... NAME} or {\huge \textbf{NAME}}.
+        m = re.search(r"\\begin\{center\}(.*?)\\end\{center\}", src, re.DOTALL)
+        if m:
+            name = self._name_from_block(m.group(1))
+            if name:
+                return name
         m = re.search(r"\\begin\{document\}([\s\S]{0,500})", src)
         if m:
             after = m.group(1)
@@ -160,11 +173,66 @@ class LatexParser:
         m = _ADDRESS_CMD_RE.search(src)
         if m:
             return self._clean(m.group(1))
+        # Inline contact lines: "Address: Toronto, Ontario, Canada" or a bare
+        # "City, ST[, Country]" run inside the centered header.
+        plain = self._to_plain_text(src)
+        m = re.search(r"Address:\s*([^|\n]+)", plain, re.IGNORECASE)
+        if m:
+            return m.group(1).strip(" .,")
+        m = _LOCATION_RE.search(plain)
+        if m:
+            return m.group(0).strip(" .,")
         return None
 
     def _extract_linkedin(self, src: str) -> Optional[str]:
         m = _LINKEDIN_RE.search(src)
         return m.group(0) if m else None
+
+    _NAME_RUN_RE = re.compile(r"[A-Z][A-Za-z'.\-]*(?:\s+[A-Z][A-Za-z'.\-]*){1,4}")
+
+    def _name_from_block(self, block: str) -> Optional[str]:
+        """Find the applicant name inside a centered header block."""
+        # Prefer a \textbf{...} run (common in `{\huge \textbf{Name}}`).
+        for b in self._find_commands(block, "textbf"):
+            cand = self._clean(b)
+            if self._looks_like_name(cand):
+                return cand
+        plain = self._to_plain_text(block)
+        for m in self._NAME_RUN_RE.finditer(plain):
+            cand = m.group(0).strip()
+            if self._looks_like_name(cand):
+                return cand
+        return None
+
+    @staticmethod
+    def _looks_like_name(s: str) -> bool:
+        if not s:
+            return False
+        s = s.strip()
+        if not (3 <= len(s) <= 60):
+            return False
+        if "@" in s or any(c.isdigit() for c in s):
+            return False
+        words = s.split()
+        if not (2 <= len(words) <= 5):
+            return False
+        if re.search(
+            r"(curriculum|vitae|resume|engineer|developer|email|phone|"
+            r"portfolio|linkedin|github|present|relevant|summary)",
+            s, re.IGNORECASE,
+        ):
+            return False
+        return True
+
+    @staticmethod
+    def _find_commands(text: str, cmd: str) -> List[str]:
+        """Return brace-balanced contents of every ``\\cmd{...}`` in ``text``."""
+        out: List[str] = []
+        for m in re.finditer(r"\\" + cmd + r"\b", text):
+            args = _balanced_args(text, m.end(), 1)
+            if args:
+                out.append(args[0])
+        return out
 
     # ---- sections -----------------------------------------------------------
 
@@ -246,7 +314,13 @@ class LatexParser:
         if items:
             return items
 
-        # Pattern 2: fallback — split on blank lines, look for \item-style bullets
+        # Pattern 2: \textbf/\textit header lines each followed by an itemize
+        # bullet list (common in plain `article`-class resumes).
+        items = self._parse_itemize_entries(body)
+        if items:
+            return items
+
+        # Pattern 3: fallback — split on blank lines, look for \item-style bullets
         blocks = re.split(r"\n\s*\n", self._strip_section_header(body))
         for block in blocks:
             text = self._to_plain_text(block).strip()
@@ -266,6 +340,150 @@ class LatexParser:
                     start_date=dates[0],
                     end_date=dates[1] or "Present",
                     bullets=bullets,
+                ))
+        return items
+
+    def _parse_itemize_entries(self, body: str) -> List[ExperienceItem]:
+        """Parse `\\textbf{role} ... \\begin{itemize}...\\end{itemize}` entries.
+
+        Each ``itemize`` block holds the bullets; the text since the previous
+        block (or the section header) is the entry header that carries the
+        title, company and dates.
+        """
+        items: List[ExperienceItem] = []
+        sec = _SECTION_RE.search(body)
+        last = sec.end() if sec else 0
+        for m in re.finditer(r"\\begin\{itemize\}", body):
+            header = body[last:m.start()]
+            end_m = re.search(r"\\end\{itemize\}", body[m.end():])
+            if not end_m:
+                continue
+            inner = body[m.end(): m.end() + end_m.start()]
+            last = m.end() + end_m.end()
+
+            bullets = self._bullets_from_description(inner)
+            title, company, start, end = self._parse_entry_header(header)
+            if title or company:
+                items.append(ExperienceItem(
+                    title=title or "",
+                    company=company or "",
+                    start_date=start,
+                    end_date=end or "Present",
+                    bullets=bullets,
+                ))
+        return items
+
+    def _parse_entry_header(self, header: str) -> Tuple[str, str, str, str]:
+        """Extract (title, company, start, end) from an entry header."""
+        bolds = [self._clean(b) for b in self._find_commands(header, "textbf")]
+        italics = [self._clean(i) for i in self._find_commands(header, "textit")]
+        plain = self._to_plain_text(header)
+        start, end = self._extract_date_range_from_line(plain)
+
+        def is_date(s: str) -> bool:
+            if not s:
+                return True
+            if s in (start, end):
+                return True
+            return self._extract_date_range_from_line(s) != ("", "")
+
+        bold_nd = [b for b in bolds if not is_date(b)]
+        ital_nd = [i for i in italics if not is_date(i)]
+
+        title = ""
+        company = ""
+        if bold_nd:
+            title = bold_nd[0]
+            rest = bold_nd[1:] + ital_nd
+            if rest:
+                company = rest[0]
+            else:
+                # Single bold run holding "Title | Company" / "Title - Company".
+                title, company = self._title_company_from_line(title)
+        elif ital_nd:
+            title = ital_nd[0]
+            company = ital_nd[1] if len(ital_nd) > 1 else ""
+        return title, company, start, end
+
+    _EDU_INST_RE = re.compile(
+        r"\b(University|College|Institute|School|Polytechnic|Academy)\b", re.IGNORECASE
+    )
+    _EDU_DEG_RE = re.compile(
+        r"\b(Bachelor|Master|Ph\.?\s?D|Doctor|Diploma|Associate|Engineering|"
+        r"Technology|Post[\s-]*Grad\w*|Graduation|Certified|Certificate|"
+        r"Foundations?|B\.?E|B\.?Sc|M\.?Sc|B\.?Tech|M\.?Tech|MBA|BBA|B\.?A|M\.?A)\b",
+        re.IGNORECASE,
+    )
+    _DATE_RANGE_RE = re.compile(
+        r"((?:[A-Za-z]{3,9}\.?\s+)?\d{4})\s*[-–—to]+\s*"
+        r"((?:[A-Za-z]{3,9}\.?\s+)?\d{4}|Present|Current)",
+        re.IGNORECASE,
+    )
+
+    def _parse_education_entries(self, body: str) -> List[EducationItem]:
+        """Parse line-based education entries, classifying degree vs. institution
+        by keyword so the two never get swapped, and keeping every entry."""
+        body = self._strip_section_header(body)
+        rows = re.split(r"\\\\|\n", body)
+
+        groups: List[List[str]] = []
+        current: List[str] = []
+        for row in rows:
+            if "\\textbf" in row and current:
+                groups.append(current)
+                current = []
+            current.append(row)
+        if current:
+            groups.append(current)
+
+        items: List[EducationItem] = []
+        for group in groups:
+            chunks: List[str] = []
+            date_str = ""
+            for row in group:
+                plain = self._to_plain_text(row).strip()
+                if not plain:
+                    continue
+                m = self._DATE_RANGE_RE.search(plain)
+                if m and not date_str:
+                    date_str = f"{m.group(1)} - {m.group(2)}"
+                # Strip a date range, then a trailing single date.
+                plain = self._DATE_RANGE_RE.sub("", plain)
+                plain = re.sub(
+                    r"\s*(?:Graduated\s+)?(?:[A-Za-z]{3,9}\.?\s+)?(?:19|20)\d{2}\s*$",
+                    "", plain,
+                ).strip(" ,–-")
+                # Keep only the part before a `|` note (e.g. coursework).
+                plain = plain.split("|")[0].strip(" ,")
+                if plain:
+                    chunks.append(plain)
+
+            if not date_str:
+                joined = " ".join(self._to_plain_text(r) for r in group)
+                ym = re.search(r"\b(19|20)\d{2}\b", joined)
+                date_str = ym.group(0) if ym else ""
+
+            institution = next((c for c in chunks if self._EDU_INST_RE.search(c)), "")
+            degree = next(
+                (c for c in chunks if c != institution and self._EDU_DEG_RE.search(c)),
+                "",
+            )
+            if not institution:
+                institution = next((c for c in chunks if c != degree), "")
+            if not degree:
+                degree = next((c for c in chunks if c != institution), "")
+
+            # Trim a trailing location off the institution ("College, City").
+            if institution and "," in institution:
+                head = institution.split(",")[0].strip()
+                if self._EDU_INST_RE.search(head):
+                    institution = head
+
+            if degree or institution:
+                items.append(EducationItem(
+                    degree=degree,
+                    institution=institution,
+                    graduation_date=date_str,
                 ))
         return items
 
@@ -289,6 +507,12 @@ class LatexParser:
                 gpa=gpa or None,
             ))
 
+        if items:
+            return items
+
+        # Keyword-classified, multi-entry line parser (handles plain templates
+        # where degree/institution order varies between templates).
+        items = self._parse_education_entries(body)
         if items:
             return items
 
@@ -339,6 +563,9 @@ class LatexParser:
         out: List[str] = []
         for p in parts:
             s = p.strip(" \t-•:")
+            # Drop a leading "Category:" label, keep the actual skill after it.
+            if ":" in s:
+                s = s.split(":", 1)[1].strip()
             if s and len(s) < 60:
                 out.append(s)
         return out
@@ -397,6 +624,8 @@ class LatexParser:
     @staticmethod
     def _clean(text: str) -> str:
         # Drop simple LaTeX leftovers from a captured field.
+        text = re.sub(r"\\\\\s*(?:\[[^\]]*\])?", " ", text)
+        text = re.sub(r"\\([%&$#_])", r"\1", text)
         text = re.sub(r"\\[a-zA-Z]+\*?(\[[^\]]*\])?", "", text)
         text = text.replace("{", "").replace("}", "")
         text = re.sub(r"~", " ", text)
@@ -410,7 +639,14 @@ class LatexParser:
         # 2. Unescape common LaTeX special-character escapes BEFORE removing
         #    backslash commands, so `\%` becomes `%` (not lost as a command).
         text = re.sub(r"\\([%&$#_])", r"\1", text)
-        text = re.sub(r"\\begin\{[^}]+\}|\\end\{[^}]+\}", "", text)
+        # Convert LaTeX line breaks (`\\` / `\\[2pt]`) and spacing macros into
+        # newlines/spaces so list rows and skill lines don't run together.
+        text = re.sub(r"\\\\\s*(?:\[[^\]]*\])?", "\n", text)
+        text = re.sub(r"\\(?:quad|qquad)\b", "\n", text)
+        text = re.sub(r"\\[,;:!]", " ", text)
+        # Drop \begin{env}[opts] WITH its optional argument so list options
+        # like `[noitemsep, leftmargin=12pt]` don't leak into the text.
+        text = re.sub(r"\\begin\{[^}]+\}(?:\[[^\]]*\])?|\\end\{[^}]+\}", "", text)
         text = re.sub(r"\\item\b\s*", "\n- ", text)
         # Inline single-arg commands like \textbf{X} -> X
         for _ in range(3):

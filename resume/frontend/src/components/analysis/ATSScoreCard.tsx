@@ -126,19 +126,44 @@ export function ATSScoreCard() {
           </div>
         )}
 
-        {atsScore.suggestions_summary.length > 0 && (
-          <div>
-            <p className="text-xs font-medium mb-2">Suggestions</p>
-            <ul className="space-y-1.5">
-              {atsScore.suggestions_summary.map((s, i) => (
-                <li key={i} className="text-xs text-muted-foreground flex gap-2">
-                  <span className="text-primary">&#8226;</span>
-                  {s}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
+        {(() => {
+          const missingKw = atsScore.missing_keywords.slice(0, 5)
+          const missingSk = atsScore.missing_skills.slice(0, 5)
+          const tips: string[] = []
+
+          if (missingSk.length > 0) {
+            tips.push(`Add these required skills to your Skills section: ${missingSk.join(', ')}.`)
+          }
+          if (missingKw.length > 0) {
+            tips.push(`Work these keywords into your experience/summary: ${missingKw.join(', ')}.`)
+          }
+          if (atsScore.experience_match.percentage < 80) {
+            tips.push('Make relevant experience more prominent (titles, recent roles).')
+          }
+          if (atsScore.education_match.percentage < 90) {
+            tips.push('State your education/degree clearly so the parser can read it.')
+          }
+          if (atsScore.formatting_score.percentage < 100 && atsScore.formatting_issues.length > 0) {
+            tips.push(`Fix formatting: ${atsScore.formatting_issues.slice(0, 2).join('; ')}.`)
+          }
+          if (tips.length === 0) {
+            tips.push('Strong match — no major gaps detected for this job.')
+          }
+
+          return (
+            <div>
+              <p className="text-xs font-medium mb-2">How to improve this score</p>
+              <ul className="space-y-1.5">
+                {tips.map((s, i) => (
+                  <li key={i} className="text-xs text-muted-foreground flex gap-2">
+                    <span className="text-primary">&#8226;</span>
+                    <span>{s}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )
+        })()}
       </CardContent>
     </Card>
   )

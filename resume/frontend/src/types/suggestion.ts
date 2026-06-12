@@ -26,3 +26,27 @@ export interface OptimizeResponse {
   high_impact_count: number
   potential_score_increase: number
 }
+
+export interface OptimizeChanges {
+  skills_added: string[]
+  summary_keywords_added: string[]
+  bullets_strengthened: {
+    experience_index: number
+    bullet_index: number
+    before: string
+    after: string
+  }[]
+  terminology_aligned: {
+    before: string
+    after: string
+  }[]
+}
+
+export interface AutoOptimizeResponse {
+  optimized_resume: import('./resume').ResumeData
+  changes: OptimizeChanges
+  score_before: import('./score').ATSScore
+  score_after: import('./score').ATSScore
+  passes_ats: boolean
+  pass_threshold: number
+}

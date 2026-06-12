@@ -13,6 +13,18 @@ logger = logging.getLogger(__name__)
 # ordinary letters/words. We only accept them when tech context is nearby.
 AMBIGUOUS_SHORT_SKILLS = {"r", "c", "go"}
 
+# JD boilerplate that should never count as a matchable ATS keyword.
+_KEYWORD_BOILERPLATE = {
+    "requirements", "requirement", "required", "responsibilities", "responsibility",
+    "qualifications", "qualification", "experience", "experiences", "nice", "have",
+    "plus", "bonus", "preferred", "desired", "must", "should", "ability", "strong",
+    "knowledge", "understanding", "familiarity", "exposure", "years", "year",
+    "role", "team", "work", "working", "candidate", "candidates", "looking",
+    "join", "company", "position", "job", "including", "etc", "ideal", "good",
+    "excellent", "skills", "skill", "proficiency", "proficient", "hands",
+    "to have", "nice to", "and", "or", "the", "with", "for", "of", "in",
+}
+
 # Words that, when near an ambiguous short skill, confirm it's the language.
 _TECH_CONTEXT_WORDS = {
     "programming", "language", "languages", "developer", "engineer", "proficient",
@@ -46,6 +58,9 @@ class KeywordExtractor:
         # Single-token surface forms, used to detect when an ambiguous short
         # skill sits in a list of other skills (e.g. "C, Python, Go").
         self._known_surface_forms = {f for f in surface_forms if " " not in f}
+        # Multi-word skills (e.g. "machine learning") that are legitimate
+        # keyword phrases even though they span two+ tokens.
+        self._known_multiword_skills = {f for f in surface_forms if " " in f}
         skill_patterns = [self.nlp.make_doc(form) for form in surface_forms]
         self.skill_matcher.add("SKILLS", skill_patterns)
 
@@ -172,19 +187,52 @@ class KeywordExtractor:
         return False
 
     def _extract_tfidf_keywords(self, text: str) -> List[Tuple[str, float]]:
-        """Extract keywords using TF-IDF"""
+        """Extract keywords using TF-IDF, filtered to terms an ATS would match.
+
+        TF-IDF on a single document emits many multi-word n-grams that span JD
+        section boundaries (e.g. "nice graphql kafka", "python django
+        experience") and generic boilerplate ("requirements", "experience").
+        These can never match a real resume, so they unfairly cap the keyword
+        score. We keep a term only if it is a single meaningful token OR a
+        recognised multi-word skill, and drop boilerplate.
+        """
         try:
             tfidf_matrix = self.vectorizer.fit_transform([text])
             feature_names = self.vectorizer.get_feature_names_out()
 
-            # Get scores
             scores = zip(feature_names, tfidf_matrix.toarray()[0])
             sorted_scores = sorted(scores, key=lambda x: x[1], reverse=True)
 
-            # Return top 50 keywords with scores
-            return [(word, float(score)) for word, score in sorted_scores[:50] if score > 0]
-        except:
+            result: List[Tuple[str, float]] = []
+            for word, score in sorted_scores:
+                if score <= 0:
+                    continue
+                if self._is_matchable_keyword(word):
+                    result.append((word, float(score)))
+                if len(result) >= 50:
+                    break
+            return result
+        except Exception:
             return []
+
+    def _is_matchable_keyword(self, term: str) -> bool:
+        """Keep single meaningful tokens and known multi-word skills; drop
+        boilerplate and cross-boundary n-grams."""
+        term = term.strip().lower()
+        if not term or term in _KEYWORD_BOILERPLATE:
+            return False
+        words = term.split()
+        # Known multi-word skill (e.g. "machine learning", "github actions").
+        if term in self._known_multiword_skills:
+            return True
+        # Single token: keep if it's not pure boilerplate and not too short.
+        if len(words) == 1:
+            return len(term) >= 2 and term not in _KEYWORD_BOILERPLATE
+        # Arbitrary multi-word phrases from single-document TF-IDF (e.g.
+        # "postgresql redis", "python django") are adjacency artifacts that
+        # span comma-separated list items and never match a real resume. Only
+        # KNOWN multi-word skills (handled above) are kept.
+        return False
 
     def _extract_years_experience(self, text: str) -> int:
         """Extract years of experience requirement"""
