@@ -1,0 +1,29 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body {
+  @apply bg-gray-50 text-gray-900 antialiased;
+}
+
+/* Simple toggle switch used by the Spices boolean control. */
+.toggle {
+  @apply relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full transition-colors;
+}
+.toggle[data-on='true'] {
+  @apply bg-brand;
+}
+.toggle[data-on='false'] {
+  @apply bg-gray-300;
+}
+.toggle-knob {
+  @apply pointer-events-none inline-block h-5 w-5 translate-x-0.5 translate-y-0.5 transform rounded-full bg-white shadow transition-transform;
+}
+.toggle[data-on='true'] .toggle-knob {
+  @apply translate-x-[1.375rem];
+}
