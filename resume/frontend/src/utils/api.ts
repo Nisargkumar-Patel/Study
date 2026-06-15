@@ -1,7 +1,12 @@
 import axios from 'axios'
 import type { ResumeData, JobData, ATSScore, OptimizeResponse, AutoOptimizeResponse } from '../types'
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+// Default to a RELATIVE base ("/api") so requests go through the same origin:
+// the Vite dev proxy in development and the nginx `/api` proxy in the Docker
+// production build. An absolute VITE_API_URL can still override it if needed.
+// (Note: Vite inlines this at BUILD time, so it must be set as a build arg,
+// not a runtime container env var.)
+const API_BASE_URL = import.meta.env.VITE_API_URL || ''
 
 const api = axios.create({
   baseURL: `${API_BASE_URL}/api`,

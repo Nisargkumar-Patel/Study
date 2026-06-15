@@ -33,8 +33,10 @@ services:
     depends_on:
       backend:
         condition: service_healthy
-    environment:
-      - VITE_API_URL=http://localhost:8000
+    # NOTE: the frontend talks to the backend through nginx's `/api` proxy
+    # (see frontend/nginx.conf) using a relative base URL. VITE_API_URL is a
+    # BUILD-time variable for Vite, so it cannot be injected here at runtime;
+    # the relative `/api` default is correct for this Compose setup.
     restart: unless-stopped
     networks:
       - ats-network
