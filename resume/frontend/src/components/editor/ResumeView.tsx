@@ -35,7 +35,7 @@ export function ResumeView({
         </section>
       )}
 
-      {resume.experience.length > 0 && (
+      {(resume.experience?.length ?? 0) > 0 && (
         <section>
           <h4 className="font-semibold text-xs uppercase text-muted-foreground mb-1">Experience</h4>
           <div className="space-y-3">
@@ -53,7 +53,7 @@ export function ResumeView({
                     {exp.end_date}
                   </p>
                 )}
-                {exp.bullets.length > 0 && (
+                {(exp.bullets?.length ?? 0) > 0 && (
                   <ul className="list-disc list-inside mt-1 space-y-0.5">
                     {exp.bullets.map((b, j) => (
                       <li key={j} className="text-xs leading-relaxed">
@@ -62,7 +62,7 @@ export function ResumeView({
                     ))}
                   </ul>
                 )}
-                {exp.description && !exp.bullets.length && (
+                {exp.description && !exp.bullets?.length && (
                   <p className="text-xs mt-1 leading-relaxed">{exp.description}</p>
                 )}
               </div>
@@ -71,7 +71,7 @@ export function ResumeView({
         </section>
       )}
 
-      {resume.education.length > 0 && (
+      {(resume.education?.length ?? 0) > 0 && (
         <section>
           <h4 className="font-semibold text-xs uppercase text-muted-foreground mb-1">Education</h4>
           <div className="space-y-2">
@@ -91,7 +91,7 @@ export function ResumeView({
         </section>
       )}
 
-      {resume.skills.length > 0 && (
+      {(resume.skills?.length ?? 0) > 0 && (
         <section>
           <h4 className="font-semibold text-xs uppercase text-muted-foreground mb-1">Skills</h4>
           <div className="flex flex-wrap gap-1.5">
@@ -117,7 +117,7 @@ export function ResumeView({
         </section>
       )}
 
-      {resume.certifications.length > 0 && (
+      {(resume.certifications?.length ?? 0) > 0 && (
         <section>
           <h4 className="font-semibold text-xs uppercase text-muted-foreground mb-1">
             Certifications

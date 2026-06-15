@@ -202,8 +202,19 @@ export const useResumeStore = create<ResumeState>()(
           historyIndex: 0,
           suggestions: [],
           atsScore: null,
+          // Clear all job/optimize-derived state so the UI doesn't show stale
+          // before/after scores or "improvements applied" against a resume
+          // that has been reverted to the original.
+          jobDescription: null,
+          optimizedResume: null,
+          optimizeChanges: null,
+          scoreBefore: null,
+          scoreAfter: null,
+          passesAts: null,
           coverLetter: null,
           coverLetterEnabled: false,
+          error: null,
+          currentStep: state.originalResume ? 1 : 0,
         })),
 
       setSelectedTemplate: (template) => set({ selectedTemplate: template }),
@@ -213,10 +224,14 @@ export const useResumeStore = create<ResumeState>()(
       setCoverLetter: (text) => set({ coverLetter: text }),
 
       useOriginalResume: (useOriginal) =>
-        set((state) => ({
-          currentResume: useOriginal ? state.originalResume : state.optimizedResume,
-          atsScore: useOriginal ? state.scoreBefore : state.scoreAfter,
-        })),
+        set((state) => {
+          // Don't blank the editor if the optimized version isn't available.
+          if (!useOriginal && !state.optimizedResume) return state
+          return {
+            currentResume: useOriginal ? state.originalResume : state.optimizedResume,
+            atsScore: useOriginal ? state.scoreBefore : state.scoreAfter,
+          }
+        }),
 
       setCurrentStep: (step) => set({ currentStep: step }),
 
@@ -284,7 +299,10 @@ export const useResumeStore = create<ResumeState>()(
               try {
                 await get().autoOptimize()
               } catch {
+                // autoOptimize set an error; recover with a plain score and
+                // clear the banner so a recovered failure isn't surfaced.
                 await get().calculateScore()
+                set({ error: null })
               }
             }
           }

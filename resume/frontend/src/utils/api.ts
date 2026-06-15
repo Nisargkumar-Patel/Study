@@ -15,6 +15,19 @@ const api = axios.create({
   },
 })
 
+// Surface the backend's error message (FastAPI returns `{ detail: "..." }`)
+// instead of axios's opaque "Request failed with status code 500".
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const detail = error?.response?.data?.detail
+    if (detail) {
+      error.message = typeof detail === 'string' ? detail : JSON.stringify(detail)
+    }
+    return Promise.reject(error)
+  }
+)
+
 export const resumeApi = {
   uploadResume: async (file: File): Promise<{ success: boolean; data: ResumeData }> => {
     const formData = new FormData()

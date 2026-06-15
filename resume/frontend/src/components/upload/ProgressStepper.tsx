@@ -43,7 +43,7 @@ export function ProgressStepper() {
                     : 'border-muted-foreground/30 text-muted-foreground'
                 )}
               >
-                {index < currentStep ? '&#10003;' : index + 1}
+                {index < currentStep ? '✓' : index + 1}
               </div>
 
               {/* Step text */}
