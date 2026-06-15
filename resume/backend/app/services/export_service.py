@@ -9,9 +9,23 @@ from docx.shared import Pt
 from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
 from io import BytesIO
 from typing import Dict
+from xml.sax.saxutils import escape as _xml_escape
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _pdf_text(value) -> str:
+    """Stringify and XML-escape a user value for a reportlab Paragraph.
+
+    reportlab parses Paragraph text as mini-XML, so a stray ``<`` or an
+    unbalanced ``<b>`` in user content (titles, bullets, skills) would raise
+    ValueError. We escape user values here and only add our own intentional
+    ``<b>`` tags AFTER escaping, so PDF export never crashes on arbitrary text.
+    """
+    if value is None:
+        return ""
+    return _xml_escape(str(value))
 
 
 class ExportService:
@@ -100,8 +114,8 @@ class ExportService:
         """Export resume to plain text format"""
         lines = []
 
-        # Header
-        name = resume_data.get("name", "")
+        # Header (name may be posted as null)
+        name = str(resume_data.get("name") or "")
         lines.append(name.upper())
         lines.append("=" * len(name))
         lines.append("")
@@ -116,7 +130,7 @@ class ExportService:
             contact.append(resume_data["location"])
 
         if contact:
-            lines.append(" | ".join(contact))
+            lines.append(" | ".join(str(c) for c in contact))
             lines.append("")
 
         # Summary
@@ -156,7 +170,7 @@ class ExportService:
         if resume_data.get("skills"):
             lines.append("SKILLS")
             lines.append("-" * 7)
-            lines.append(", ".join(resume_data["skills"]))
+            lines.append(", ".join(str(s) for s in resume_data["skills"]))
             lines.append("")
 
         # Certifications
@@ -176,16 +190,16 @@ class ExportService:
 
         # Header - Name and Contact
         name = resume_data.get("name", "")
-        story.append(Paragraph(name, styles['Name']))
+        story.append(Paragraph(_pdf_text(name), styles['Name']))
 
         contact = self._format_contact(resume_data)
-        story.append(Paragraph(contact, styles['Contact']))
+        story.append(Paragraph(_pdf_text(contact), styles['Contact']))
         story.append(Spacer(1, 0.2 * inch))
 
         # Summary
         if resume_data.get("summary"):
             story.append(Paragraph("PROFESSIONAL SUMMARY", styles['Heading']))
-            story.append(Paragraph(resume_data["summary"], styles['Body']))
+            story.append(Paragraph(_pdf_text(resume_data["summary"]), styles['Body']))
             story.append(Spacer(1, 0.15 * inch))
 
         # Experience
@@ -194,16 +208,16 @@ class ExportService:
 
             for exp in resume_data["experience"]:
                 # Job title and company
-                job_header = f"<b>{exp.get('title', '')}</b> - {exp.get('company', '')}"
+                job_header = f"<b>{_pdf_text(exp.get('title', ''))}</b> - {_pdf_text(exp.get('company', ''))}"
                 story.append(Paragraph(job_header, styles['Body']))
 
                 # Dates
-                dates = f"{exp.get('start_date', '')} to {exp.get('end_date', '')}"
+                dates = f"{_pdf_text(exp.get('start_date', ''))} to {_pdf_text(exp.get('end_date', ''))}"
                 story.append(Paragraph(dates, styles['Subtitle']))
 
                 # Bullets
                 for bullet in exp.get("bullets", []):
-                    bullet_text = f"• {bullet}"
+                    bullet_text = f"• {_pdf_text(bullet)}"
                     story.append(Paragraph(bullet_text, styles['Body']))
 
                 story.append(Spacer(1, 0.1 * inch))
@@ -213,11 +227,11 @@ class ExportService:
             story.append(Paragraph("EDUCATION", styles['Heading']))
 
             for edu in resume_data["education"]:
-                edu_text = f"<b>{edu.get('degree', '')}</b> - {edu.get('institution', '')}"
+                edu_text = f"<b>{_pdf_text(edu.get('degree', ''))}</b> - {_pdf_text(edu.get('institution', ''))}"
                 story.append(Paragraph(edu_text, styles['Body']))
 
                 if edu.get("graduation_date"):
-                    story.append(Paragraph(edu["graduation_date"], styles['Subtitle']))
+                    story.append(Paragraph(_pdf_text(edu["graduation_date"]), styles['Subtitle']))
 
                 story.append(Spacer(1, 0.05 * inch))
 
@@ -225,7 +239,7 @@ class ExportService:
         if resume_data.get("skills"):
             story.append(Spacer(1, 0.1 * inch))
             story.append(Paragraph("SKILLS", styles['Heading']))
-            skills_text = " | ".join(resume_data["skills"])
+            skills_text = " | ".join(_pdf_text(s) for s in resume_data["skills"])
             story.append(Paragraph(skills_text, styles['Body']))
 
         # Certifications
@@ -234,7 +248,7 @@ class ExportService:
             story.append(Paragraph("CERTIFICATIONS", styles['Heading']))
 
             for cert in resume_data["certifications"]:
-                story.append(Paragraph(f"• {cert}", styles['Body']))
+                story.append(Paragraph(f"• {_pdf_text(cert)}", styles['Body']))
 
         return story
 
@@ -303,7 +317,7 @@ class ExportService:
 
                 # Bullets
                 for bullet in exp.get("bullets", []):
-                    doc.add_paragraph(bullet, style='List Bullet')
+                    doc.add_paragraph(str(bullet or ""), style='List Bullet')
 
                 doc.add_paragraph()  # Spacing
 
@@ -329,7 +343,7 @@ class ExportService:
             heading.runs[0].font.bold = True
             heading.runs[0].font.size = Pt(12)
 
-            skills_text = " | ".join(resume_data["skills"])
+            skills_text = " | ".join(str(s) for s in resume_data["skills"])
             doc.add_paragraph(skills_text)
 
         # Certifications

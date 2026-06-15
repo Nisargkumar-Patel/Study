@@ -16,7 +16,11 @@ class ATSScorer:
     """Calculate ATS compatibility score"""
 
     def __init__(self):
-        self.vectorizer = TfidfVectorizer(stop_words='english', ngram_range=(1, 2))
+        # NOTE: a TfidfVectorizer is intentionally NOT stored on the singleton.
+        # fit_transform mutates the vectorizer's vocabulary_/idf_ state, and this
+        # service runs in FastAPI's threadpool, so a shared instance would race
+        # across concurrent requests. A fresh one is created per scoring call.
+        pass
 
     def calculate_score(self, resume_data: Dict, job_data: Dict) -> ATSScore:
         """
@@ -102,14 +106,17 @@ class ATSScorer:
         if resume_data.get("raw_text"):
             parts.append(resume_data["raw_text"])
 
-        return " ".join(parts)
+        # Posted dicts are untrusted; coerce every part to str so a None or
+        # numeric skill/bullet can't raise TypeError in the join.
+        return " ".join(str(p) for p in parts if p is not None)
 
     def _calculate_keyword_match(self, resume_text: str, job_text: str,
                                   resume_data: Dict, job_data: Dict) -> ScoreBreakdown:
         """Calculate keyword match score using TF-IDF and cosine similarity"""
         try:
-            # Vectorize both texts
-            vectors = self.vectorizer.fit_transform([job_text, resume_text])
+            # Vectorize both texts (fresh vectorizer per call — see __init__).
+            vectorizer = TfidfVectorizer(stop_words='english', ngram_range=(1, 2))
+            vectors = vectorizer.fit_transform([job_text, resume_text])
             job_vector = vectors[0]
             resume_vector = vectors[1]
 
@@ -289,6 +296,10 @@ class ATSScorer:
         """Parse date range and return months"""
         # Simple parsing (assumes format like "Jan 2020" or "2020")
         # Returns approximate months
+
+        # Posted experience entries may carry null dates; coerce to "".
+        start = str(start) if start is not None else ""
+        end = str(end) if end is not None else ""
 
         if "present" in end.lower() or "current" in end.lower():
             end = datetime.now().strftime("%Y")

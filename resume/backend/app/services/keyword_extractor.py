@@ -46,7 +46,13 @@ class KeywordExtractor:
                 self.nlp = spacy.load("en_core_web_md")
             except OSError:
                 logger.error("No spaCy model found. Using en_core_web_sm as fallback")
-                self.nlp = spacy.load("en_core_web_sm")
+                try:
+                    self.nlp = spacy.load("en_core_web_sm")
+                except OSError as exc:
+                    raise RuntimeError(
+                        "No spaCy English model is installed. Install one, e.g. "
+                        "`python -m spacy download en_core_web_sm`."
+                    ) from exc
 
         # Create phrase matcher for skills. We match canonical skills AND their
         # aliases/short forms; matched alias surface forms are resolved back to
@@ -72,6 +78,15 @@ class KeywordExtractor:
             min_df=1
         )
 
+    def _nlp(self, text):
+        """Run spaCy, but never exceed the model's max_length (huge pasted JDs
+        or PDF text would otherwise raise spaCy E088)."""
+        text = text or ""
+        limit = getattr(self.nlp, "max_length", 1_000_000)
+        if len(text) > limit:
+            text = text[:limit]
+        return self.nlp(text)
+
     def extract_from_job_description(self, jd_text: str) -> Dict[str, Any]:
         """
         Extract keywords, skills, and requirements from job description
@@ -82,7 +97,7 @@ class KeywordExtractor:
         Returns:
             Dictionary with extracted information
         """
-        doc = self.nlp(jd_text)
+        doc = self._nlp(jd_text)
 
         # Extract skills using phrase matching
         skills = self._extract_skills(doc)
@@ -127,7 +142,7 @@ class KeywordExtractor:
         Returns:
             Dictionary with extracted information
         """
-        doc = self.nlp(resume_text)
+        doc = self._nlp(resume_text)
 
         # Extract skills
         skills = self._extract_skills(doc)
@@ -259,7 +274,7 @@ class KeywordExtractor:
         ]
 
         education = []
-        doc = self.nlp(text.lower())
+        doc = self._nlp(text.lower())
 
         for sent in doc.sents:
             sent_text = sent.text

@@ -80,6 +80,8 @@ def normalize_text(text: str) -> str:
 def canonicalize(term: str) -> str:
     """Canonical key for a term: lowercased, whitespace-collapsed, spelling- and
     synonym/acronym-normalized (e.g. 'AWS' and 'Amazon Web Services' share a key)."""
+    # Posted resume/job dicts are untrusted: a skill may be None or a non-string.
+    term = str(term) if term is not None else ""
     spelled = _normalize_words(re.sub(r"\s+", " ", term.strip()))
     return _VARIANT_TO_CANON.get(spelled, spelled)
 

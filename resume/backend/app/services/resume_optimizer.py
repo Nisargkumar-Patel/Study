@@ -90,7 +90,22 @@ class ResumeOptimizer:
             try:
                 self.nlp = spacy.load("en_core_web_md")
             except OSError:
-                self.nlp = spacy.load("en_core_web_sm")
+                try:
+                    self.nlp = spacy.load("en_core_web_sm")
+                except OSError as exc:
+                    raise RuntimeError(
+                        "No spaCy English model is installed. Install one, e.g. "
+                        "`python -m spacy download en_core_web_sm`."
+                    ) from exc
+
+    def _nlp(self, text):
+        """Run spaCy, capped at the model's max_length (avoids spaCy E088 on
+        very large resume text)."""
+        text = text or ""
+        limit = getattr(self.nlp, "max_length", 1_000_000)
+        if len(text) > limit:
+            text = text[:limit]
+        return self.nlp(text)
 
     def generate_suggestions(self, resume_data: Dict, job_data: Dict) -> List[Suggestion]:
         """
@@ -250,6 +265,9 @@ class ResumeOptimizer:
             return
 
         def rewrite(text: str) -> str:
+            # Bullets/descriptions in a posted resume may be null or non-string.
+            if not isinstance(text, str):
+                return text
             for canon, jd_form in jd_forms.items():
                 jd_lower = jd_form.lower()
                 # Variants of this term, written in the resume but NOT already in
@@ -286,6 +304,9 @@ class ResumeOptimizer:
         Capitalizes the replacement if it starts the bullet. Only the first
         match is replaced to avoid over-editing a single line.
         """
+        # A posted bullet may be null or non-string; nothing to strengthen.
+        if not isinstance(bullet, str):
+            return bullet
         for weak, strong_alternatives in WEAK_VERBS.items():
             pattern = r'\b' + re.escape(weak) + r'\b'
             m = re.search(pattern, bullet, re.IGNORECASE)
@@ -386,6 +407,10 @@ class ResumeOptimizer:
         """Generate suggestions for a single bullet point"""
         suggestions = []
 
+        # A posted bullet may be null or non-string; skip it.
+        if not isinstance(bullet, str):
+            return suggestions
+
         # 1. Check for weak verbs
         for weak, strong_alternatives in WEAK_VERBS.items():
             pattern = r'\b' + re.escape(weak) + r'\b'
@@ -444,12 +469,12 @@ class ResumeOptimizer:
         """Generate suggestions for skills section"""
         suggestions = []
 
-        current_skills = set(skill.lower() for skill in resume_data.get("skills", []))
+        current_skills = set(str(skill).lower() for skill in resume_data.get("skills", []))
 
         # Suggest adding missing skills
         for skill in missing_skills[:10]:  # Top 10 missing skills
-            if skill.lower() not in current_skills:
-                current_skills_text = ", ".join(resume_data.get("skills", []))
+            if str(skill).lower() not in current_skills:
+                current_skills_text = ", ".join(str(s) for s in resume_data.get("skills", []))
                 suggested_text = f"{current_skills_text}, {skill}" if current_skills_text else skill
 
                 suggestions.append(Suggestion(
@@ -485,7 +510,7 @@ class ResumeOptimizer:
 
         Uses dependency parsing to find appropriate insertion points
         """
-        doc = self.nlp(text)
+        doc = self._nlp(text)
 
         # Simple strategy: try to append with appropriate context
         # For a production system, this would be more sophisticated
@@ -510,8 +535,8 @@ class ResumeOptimizer:
 
         Simple version: check for common words or themes
         """
-        doc = self.nlp(text.lower())
-        keyword_doc = self.nlp(keyword.lower())
+        doc = self._nlp(text.lower())
+        keyword_doc = self._nlp(keyword.lower())
 
         # Check if keyword appears in similar context
         text_tokens = {token.lemma_ for token in doc if not token.is_stop}
@@ -560,7 +585,8 @@ class ResumeOptimizer:
 
         parts.extend(resume_data.get("skills", []))
 
-        return " ".join(parts)
+        # Untrusted dicts: coerce so a None/numeric item can't break the join.
+        return " ".join(str(p) for p in parts if p is not None)
 
 
 # Singleton instance

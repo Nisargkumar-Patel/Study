@@ -30,12 +30,22 @@ async def upload_resume(file: UploadFile = File(...)):
     Returns structured resume data with formatting analysis
     """
     try:
-        # Validate file type
-        if not file.filename.endswith('.pdf'):
+        # Validate file type (filename can be None for nameless multipart parts).
+        if not (file.filename or "").lower().endswith(".pdf"):
             raise HTTPException(status_code=400, detail="Only PDF files are supported")
 
         # Read file
         pdf_bytes = await file.read()
+
+        # Reject empty or oversized uploads (protects memory and the parser).
+        MAX_PDF_BYTES = 10 * 1024 * 1024  # 10 MB
+        if not pdf_bytes:
+            raise HTTPException(status_code=400, detail="Uploaded file is empty")
+        if len(pdf_bytes) > MAX_PDF_BYTES:
+            raise HTTPException(status_code=413, detail="PDF is too large (max 10 MB)")
+        # Sanity-check the PDF magic bytes so a renamed non-PDF fails cleanly.
+        if not pdf_bytes.lstrip()[:5].startswith(b"%PDF"):
+            raise HTTPException(status_code=400, detail="File does not look like a valid PDF")
 
         # Parse PDF
         parser = get_pdf_parser()
@@ -51,9 +61,12 @@ async def upload_resume(file: UploadFile = File(...)):
         result["source_format"] = "pdf"
         return {"success": True, "data": result}
 
+    except HTTPException:
+        # Client errors (bad type/size) must pass through, not become a 500.
+        raise
     except Exception as e:
         logger.error(f"Error processing resume upload: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to process the uploaded resume")
 
 
 def _serialize_parsed(parsed_resume, resume_keywords) -> dict:
@@ -126,7 +139,7 @@ async def upload_latex_resume(request: UploadLatexRequest):
         raise
     except Exception as e:
         logger.error(f"Error processing LaTeX upload: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to parse the LaTeX resume")
 
 
 @router.post("/parse-text")

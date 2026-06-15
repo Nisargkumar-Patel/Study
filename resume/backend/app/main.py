@@ -9,11 +9,17 @@ app = FastAPI(
     debug=settings.debug
 )
 
-# CORS middleware
+# CORS middleware.
+# In the Docker deployment the frontend talks to the backend same-origin via
+# the nginx `/api` proxy, so CORS is effectively unused. We keep a permissive
+# allow-list for direct/dev access, but `allow_origins=["*"]` is INVALID with
+# `allow_credentials=True` (browsers reject it), and we don't use credentials —
+# so credentials are disabled to keep the wildcard valid.
+_allow_all = settings.cors_origins == ["*"]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
-    allow_credentials=True,
+    allow_credentials=not _allow_all,
     allow_methods=["*"],
     allow_headers=["*"],
 )
