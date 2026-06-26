@@ -73,7 +73,9 @@ export function ExportOptions() {
     ? 'Source: LaTeX. The LaTeX export is your original .tex with your edits patched in — open in Overleaf to compile your exact PDF. PDF/Word here are ATS-plain regenerations and will not match your LaTeX styling.'
     : sourceFormat === 'pdf'
       ? 'Source: PDF. PDF/Word/LaTeX exports here are ATS-plain regenerations from the parsed content — they cannot reproduce your original PDF layout. For an exact format, re-upload as LaTeX.'
-      : 'Upload a resume to enable exports.'
+      : sourceFormat === 'docx'
+        ? 'Source: Word (.docx). PDF/Word/LaTeX exports here are ATS-plain regenerations from the parsed content — they will not match your original .docx formatting. For an exact format, re-upload as LaTeX.'
+        : 'Upload a resume to enable exports.'
 
   return (
     <Card>

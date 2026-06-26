@@ -33,7 +33,7 @@ export interface ResumeData {
   raw_text?: string
   keywords?: string[]
   formatting_issues?: string[]
-  source_format?: 'pdf' | 'latex'
+  source_format?: 'pdf' | 'latex' | 'docx'
   latex_source?: string
 }
 

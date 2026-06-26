@@ -1,4 +1,10 @@
-version: '3.8'
+# Production-ready Compose for the ATS Resume Builder.
+# Tested for: `docker-compose up --build` -> open http://<host>:3000
+#
+# State note: the backend is intentionally stateless. There is no DB; the
+# parsed resume + LaTeX source live in the browser's Zustand store. A page
+# refresh loses unsaved work — this is by design for a 5-user on-prem tool.
+# (Compose `version:` is obsolete in Compose v2 and intentionally omitted.)
 
 services:
   backend:
@@ -10,16 +16,20 @@ services:
       - "8000:8000"
     environment:
       - PYTHONUNBUFFERED=1
-      - DEBUG=True
-    volumes:
-      - ./backend/app:/app/app  # Hot reload for development
+      - DEBUG=False
+    # NOTE: a `./backend/app:/app/app` bind-mount was previously used so code
+    # changes hot-reloaded under uvicorn --reload. The production CMD no longer
+    # uses --reload, and shipping a bind-mount in prod would mean the running
+    # container reads host code instead of the image it was built from. For
+    # development, run `uvicorn app.main:app --reload` locally or add a
+    # docker-compose.override.yml with the bind-mount + DEBUG=True.
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 40s
+      start_period: 40s  # spaCy en_core_web_lg loads on first request
     networks:
       - ats-network
 
@@ -44,6 +54,3 @@ services:
 networks:
   ats-network:
     driver: bridge
-
-volumes:
-  backend_data:

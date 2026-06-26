@@ -20,7 +20,10 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
 
-    /* Path mapping */
+    /* Path mapping. baseUrl is deprecated in TS 6.x but still required by some
+       toolchains; ignoreDeprecations silences the build error without losing
+       the @/* alias the codebase already depends on. */
+    "ignoreDeprecations": "5.0",
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"]

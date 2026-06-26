@@ -1,311 +1,242 @@
 # ATS Resume Builder
 
-An intelligent, full-stack web application that helps users optimize their resumes for Applicant Tracking Systems (ATS). Built with React, TypeScript, FastAPI, and powered by NLP - no paid API keys required!
+A self-hosted web app that helps you tailor a resume to a specific job, score
+it against an ATS-style rubric, and export the result. Runs entirely on your
+machine — **no paid APIs, no third-party data sharing.** Intended for small
+on-prem deployments (≈ 5 users).
 
 ## Features
 
-✨ **PDF Resume Upload & Parsing** - Extract structured data from PDF resumes with automatic section detection
-
-📊 **ATS Compatibility Scoring** - Get a comprehensive 0-100 score with detailed breakdowns:
-- Keyword match analysis (40%)
-- Skills match percentage (30%)
-- Experience relevance (15%)
-- Education matching (10%)
-- Formatting issues detection (5%)
-
-🤖 **AI-Powered Suggestions** - Get intelligent optimization recommendations using NLP:
-- Weak verb replacement
-- Missing keyword insertion
-- Quantification suggestions
-- Tone adjustments
-- All powered by spaCy and TF-IDF (no paid APIs!)
-
-✏️ **Side-by-Side Editor** - Compare original vs optimized resume with:
-- Real-time ATS score updates
-- Accept/reject suggestions individually
-- Undo/redo functionality
-- Section reordering
-
-📄 **Export Options** - Download ATS-friendly resumes in:
-- PDF (single-column, standard fonts, no images)
-- DOCX (Microsoft Word format)
-- Plain text
-
-🎨 **5 ATS-Optimized Templates**:
-- Classic - Traditional single-column
-- Modern - Clean with subtle accents
-- Technical - Optimized for engineering roles
-- Executive - For senior/leadership positions
-- Minimal - Maximum readability
-
-🌙 **Dark Mode** - Beautiful dark theme enabled by default
+- **Multiple input formats** — upload a PDF or a Word `.docx`, or paste a LaTeX
+  source. PDF and DOCX use the same plain-text section parser; LaTeX uses a
+  brace-balanced parser that preserves the original `.tex` for a layout-exact
+  export.
+- **Job-description analysis** — extracts required vs. preferred skills,
+  technologies, education requirements, and years of experience, with
+  spelling/acronym normalization (k8s → Kubernetes, AWS ↔ Amazon Web Services,
+  etc.).
+- **ATS scoring** — 0–100 score with sub-scores for keyword match, skills,
+  experience, education, and formatting.
+- **Auto-optimized resume** — generates an ATS-passing version of your resume
+  with only truthful, non-fabricating edits (adds JD-required skills you don't
+  list yet, weaves JD keywords into the summary, aligns synonym variants,
+  strengthens weak verbs). Shows before/after scores and a change summary.
+- **Exports** — PDF (ATS-plain), Word (`.docx`), plain text, and LaTeX
+  (Overleaf-ready, or your original `.tex` patched in place if you uploaded one).
+- **Optional cover letter** — template-filled from your resume + the job,
+  fully editable, copy/download as `.txt`.
 
 ## Quick Start
 
 ### Prerequisites
-
-- Docker
-- Docker Compose
+- Docker and Docker Compose
 - Git
 
-### Installation & Running
-
-1. **Clone the repository**
+### Run it
 ```bash
-git clone git@github.com:Nisargkumar-Patel/Study.git
+git clone <your-fork-url>
 cd Study/resume
-```
-
-2. **Run with Docker Compose**
-```bash
 docker-compose up --build
 ```
 
-3. **Access the application**
-- Frontend: http://localhost:3000
-- Backend API: http://localhost:8000
-- API Documentation: http://localhost:8000/docs
+Then open **http://localhost:3000**.
 
-That's it! The application is now running.
+The frontend calls the backend through nginx's `/api` proxy (same-origin), so
+no extra configuration is needed for the local Docker deployment.
 
 ## Tech Stack
 
 ### Backend
-- **FastAPI** - Modern Python web framework
-- **PyMuPDF (fitz)** - PDF parsing and extraction
-- **ReportLab** - ATS-friendly PDF generation
-- **python-docx** - DOCX export
-- **spaCy** (en_core_web_lg) - NLP and Named Entity Recognition
-- **scikit-learn** - TF-IDF vectorization and cosine similarity
-- **NLTK** - Text processing utilities
+- **FastAPI** — Python web framework
+- **PyMuPDF** (`fitz`) — PDF text extraction
+- **python-docx** — `.docx` parsing + export
+- **ReportLab** — ATS-plain PDF export
+- **spaCy** (`en_core_web_lg`, falls back to `_md` / `_sm`) — NLP, phrase matching
+- **scikit-learn** — TF-IDF vectorization and cosine similarity
 
 ### Frontend
-- **React 18** - UI library
-- **TypeScript** - Type safety
-- **Vite** - Build tool and dev server
-- **Tailwind CSS** - Utility-first CSS
-- **Zustand** - State management
-- **TipTap** - Rich text editor
-- **Framer Motion** - Animations
-- **Axios** - HTTP client
+- **React 18 + TypeScript**, **Vite**, **Tailwind CSS**, **Zustand**, **Axios**
+- Production build served by **nginx** with a built-in `/api → backend:8000`
+  reverse proxy.
 
-### Infrastructure
-- **Docker** - Containerization
-- **Docker Compose** - Multi-container orchestration
-- **Nginx** - Frontend web server
+## API Endpoints
+
+### Resume
+- `POST /api/resume/upload` — upload a PDF (`multipart/form-data`)
+- `POST /api/resume/upload-docx` — upload a Word `.docx`
+- `POST /api/resume/upload-latex` — submit a pasted `.tex` source
+- `POST /api/resume/parse-text` — parse a plain-text resume
+
+### Analysis
+- `POST /api/analysis/analyze-job` — extract structured data from a JD
+- `POST /api/analysis/score` — full ATS score
+- `POST /api/analysis/score-live` — fast partial score for live updates
+- `POST /api/analysis/optimize` — generate per-bullet suggestions
+- `POST /api/analysis/auto-optimize` — produce an optimized resume + change report + before/after scores
+- `POST /api/analysis/cover-letter` — generate a template-based cover letter
+
+### Export
+- `POST /api/export/pdf` — ATS-plain PDF
+- `POST /api/export/docx` — Word document
+- `POST /api/export/text` — plain text
+- `POST /api/export/latex` — Overleaf-ready `.tex` (patches the original
+  `.tex` if you uploaded LaTeX; otherwise emits a fresh template)
+
+Interactive docs: **http://localhost:8000/docs**
 
 ## Architecture
 
 ```
 resume/
-├── backend/          # FastAPI application
+├── backend/
 │   ├── app/
-│   │   ├── main.py              # FastAPI entry point
-│   │   ├── routers/             # API endpoints
-│   │   │   ├── resume.py        # Resume upload & parsing
-│   │   │   ├── analysis.py      # Job analysis & scoring
-│   │   │   └── export.py        # Export endpoints
-│   │   ├── services/            # Core business logic
-│   │   │   ├── pdf_parser.py         # PDF parsing
-│   │   │   ├── keyword_extractor.py  # NLP keyword extraction
-│   │   │   ├── ats_scorer.py         # ATS scoring algorithm
-│   │   │   ├── resume_optimizer.py   # Suggestion generation
-│   │   │   └── export_service.py     # Document export
-│   │   └── models/              # Pydantic data models
+│   │   ├── main.py              # FastAPI entry point + CORS
+│   │   ├── routers/
+│   │   │   ├── resume.py        # /upload, /upload-docx, /upload-latex
+│   │   │   ├── analysis.py      # /analyze-job, /score, /optimize, ...
+│   │   │   └── export.py        # /pdf, /docx, /text, /latex
+│   │   ├── services/
+│   │   │   ├── pdf_parser.py
+│   │   │   ├── docx_parser.py
+│   │   │   ├── latex_parser.py
+│   │   │   ├── latex_export.py
+│   │   │   ├── keyword_extractor.py
+│   │   │   ├── ats_scorer.py
+│   │   │   ├── resume_optimizer.py
+│   │   │   ├── cover_letter_generator.py
+│   │   │   └── export_service.py
+│   │   ├── utils/text_normalizer.py
+│   │   └── models/
 │   └── requirements.txt
-│
-├── frontend/         # React application
+├── frontend/
 │   ├── src/
-│   │   ├── components/          # React components
-│   │   ├── stores/              # Zustand state management
-│   │   ├── types/               # TypeScript types
-│   │   ├── utils/               # Utilities (API client)
-│   │   └── App.tsx              # Main app component
+│   │   ├── components/{upload,analysis,editor,export,ui}/
+│   │   ├── stores/resumeStore.ts
+│   │   ├── utils/api.ts
+│   │   └── types/
+│   ├── nginx.conf               # serves SPA + proxies /api to backend
 │   └── package.json
-│
-└── docker-compose.yml    # Container orchestration
+└── docker-compose.yml
 ```
 
 ## How It Works
 
-### 1. PDF Parsing
-The application uses PyMuPDF to extract text while preserving layout. It then uses heuristics and regex patterns to detect resume sections:
-- Looks for common section headers (EXPERIENCE, EDUCATION, SKILLS, etc.)
-- Uses font size, capitalization, and whitespace as indicators
-- Parses each section with section-specific logic
-- Checks for ATS-unfriendly elements (tables, images, multiple columns)
+### 1. Parsing
+- **PDF / DOCX** — text is extracted then split into sections by header
+  patterns (Summary / Experience / Education / Skills / …) using a shared
+  section parser.
+- **LaTeX** — a brace-balanced scanner handles `\cventry` / `\cvitem`
+  (moderncv) and plain `article` templates with `\textbf` / `\textit` headers
+  and `itemize` bullet lists. The original `.tex` is kept so edits can be
+  patched back in for a layout-exact export.
+- Image-only / scanned / encrypted PDFs are rejected with a 422 and an
+  actionable message (not silently returned as an empty resume).
 
-### 2. Keyword Extraction (No Paid APIs!)
-Uses a hybrid NLP approach:
-- **TF-IDF Vectorization** - Extracts top keywords from job descriptions with importance scores
-- **spaCy NER** - Identifies skills, technologies, and entities
-- **Phrase Matching** - Matches against a database of 1000+ common skills
-- **Dependency Parsing** - Extracts requirement phrases
+### 2. Keyword extraction (no LLM)
+- spaCy phrase matcher over a curated ~400-skill vocabulary, with alias /
+  acronym normalization (`k8s`/`kubernetes`, `js`/`javascript`,
+  `postgres`/`postgresql`, …).
+- TF-IDF for general keywords, with a boilerplate filter so JD scaffolding
+  (`requirements`, `nice to have`, …) doesn't count.
 
-### 3. ATS Scoring Algorithm
-Calculates a weighted score based on:
-```python
-Overall Score = (
-    Keyword Match × 0.40 +      # Cosine similarity of TF-IDF vectors
-    Skills Match × 0.30 +        # Percentage of required skills present
-    Experience Match × 0.15 +    # Years of experience comparison
-    Education Match × 0.10 +     # Degree requirements
-    Formatting × 0.05            # ATS-friendly formatting check
-)
+### 3. ATS scoring
+Weighted blend:
 ```
+score = 0.40 * keyword_match
+      + 0.30 * skills_match
+      + 0.15 * experience_match
+      + 0.10 * education_match
+      + 0.05 * formatting
+```
+Scoring is spelling- and acronym-agnostic.
 
-### 4. Resume Optimization (Template-Based, No LLM)
-Generates suggestions using:
-- **Weak Verb Replacement** - Library of 200+ strong action verbs
-- **Keyword Insertion** - Uses dependency parsing to find natural insertion points
-- **Quantification Detection** - Suggests adding metrics to vague statements
-- **Tone Matching** - Uses POS distribution analysis
+### 4. Auto-optimization (truthful, no LLM)
+Applies only these transformations:
+1. Append JD-required skills you don't list yet (with proper casing — AWS, CI/CD, PostgreSQL, …).
+2. Weave missing JD keywords (backed by skills you now list) into the summary.
+3. Rewrite synonym variants to the JD's exact wording (`k8s → Kubernetes`).
+4. Strengthen weak verbs in existing bullets (`responsible for → led`).
 
-### 5. ATS-Friendly PDF Export
-Generates PDFs that pass ATS parsers:
-- Single-column layout (no multi-column confusion)
-- Standard fonts only (Helvetica, Arial, Times)
-- No images, graphics, or charts
-- No critical info in headers/footers
-- Pure black text (#000000)
-- Proper text layer for parsing
+It deliberately does **not** invent jobs, dates, degrees, titles, or metrics.
 
-## API Endpoints
+### 5. Cover letter (optional)
+A toggle in the Export step generates a template-filled cover letter from your
+resume + the job. Fully editable; copy or download as `.txt`.
 
-### Resume Endpoints
-- `POST /api/resume/upload` - Upload PDF resume
-- `POST /api/resume/parse-text` - Parse text resume
+## Known limits
 
-### Analysis Endpoints
-- `POST /api/analysis/analyze-job` - Analyze job description
-- `POST /api/analysis/score` - Calculate ATS score
-- `POST /api/analysis/optimize` - Generate suggestions
-- `POST /api/analysis/score-live` - Real-time score (fast)
-
-### Export Endpoints
-- `POST /api/export/pdf` - Export to PDF
-- `POST /api/export/docx` - Export to DOCX
-- `POST /api/export/text` - Export to text
-
-Full API documentation available at: http://localhost:8000/docs
+- **No persistence.** The backend is stateless; parsed resumes and any LaTeX
+  source live only in the browser. A refresh loses unsaved work.
+- **LaTeX patcher is best-effort.** moderncv and plain `article` templates
+  parse and round-trip well; very exotic templates fall back to a structured
+  re-render. `\input{}`/`\include{}` multi-file documents and custom
+  `\newcommand` macros are not expanded.
+- **In-app PDF/DOCX export is ATS-plain.** It cannot reproduce your original
+  PDF/Word styling — for an exact format, re-upload as LaTeX and use the
+  patched LaTeX export.
+- **No OCR.** Scanned/image-only PDFs are rejected.
 
 ## Development
 
-### Backend Development
+### Backend
 ```bash
 cd backend
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+python -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
-# Install the spaCy model from its pinned wheel (avoids the broken
-# `spacy download` URL resolver). A smaller model also works: the app
-# falls back en_core_web_lg -> _md -> _sm automatically.
+# Install the spaCy model from its pinned wheel (the lg model also has
+# en_core_web_md / en_core_web_sm fallbacks):
 pip install https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.7.1/en_core_web_lg-3.7.1-py3-none-any.whl
 uvicorn app.main:app --reload
 ```
 
-### Frontend Development
+### Frontend
 ```bash
 cd frontend
 npm install
-npm run dev
+npm run dev   # http://localhost:3000, proxies /api to localhost:8000
 ```
 
-### Testing
+### Tests
 ```bash
-# Backend tests
-cd backend
-pytest
-
-# Frontend linting
-cd frontend
-npm run lint
+cd backend && pytest
+cd frontend && npm run build   # also runs tsc
 ```
 
 ## Environment Variables
 
-### Backend
-Create `.env` file in `backend/` directory:
+### Backend (`backend/.env`)
 ```
-DEBUG=True
+DEBUG=False        # set True for verbose error pages in development
 API_VERSION=v1
 ```
 
 ### Frontend
-Create `.env` file in `frontend/` directory:
+The frontend has **no required env vars** in the standard Docker deployment —
+it talks to the backend through nginx's `/api` proxy using a relative URL.
+
+If you ever need to point the frontend at a backend on a different origin (e.g.
+for a non-Docker dev setup), set `VITE_API_URL` **at build time** (it's
+inlined by Vite during `npm run build`):
+```bash
+VITE_API_URL=http://my-backend:8000 npm run build
 ```
-VITE_API_URL=http://localhost:8000
-```
-
-## Key Features & Benefits
-
-### No Paid APIs Required
-All AI-powered features use open-source NLP libraries:
-- spaCy for entity recognition and dependency parsing
-- scikit-learn for TF-IDF and cosine similarity
-- NLTK for text processing
-- Template-based suggestion generation
-
-### Real ATS Compatibility
-The scoring algorithm and PDF export follow actual ATS requirements:
-- Based on industry-standard ATS systems
-- Tests against common ATS parsing rules
-- Generates truly machine-readable PDFs
-
-### Fast & Efficient
-- Real-time score updates with debouncing
-- Cached job description analysis
-- Optimized TF-IDF vectorization
-- Singleton pattern for NLP model loading
-
-### Production Ready
-- Docker containerization
-- Health checks
-- Error handling and validation
-- CORS configuration
-- Nginx reverse proxy
 
 ## Troubleshooting
 
-### Docker Build Issues
-If spaCy model download fails during build:
+### Clean rebuild
 ```bash
 docker-compose down
 docker-compose build --no-cache
 docker-compose up
 ```
 
-### Port Already in Use
-Change ports in `docker-compose.yml`:
-```yaml
-ports:
-  - "3001:80"  # Frontend
-  - "8001:8000"  # Backend
-```
+### Port already in use
+Change ports in `docker-compose.yml` (default: `3000` frontend, `8000` backend).
 
-### PDF Parsing Issues
-The parser works best with:
-- Clean, well-formatted PDFs
-- Standard section headers
-- Single-column layouts
-- Text-based PDFs (not scanned images)
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit issues or pull requests.
+### "No text could be extracted from this PDF"
+The parser requires a text-based PDF. Scanned / image-only PDFs are rejected
+because there is no OCR step.
 
 ## License
 
-This project is open source and available under the MIT License.
-
-## Acknowledgments
-
-- Built with Claude Code
-- Powered by open-source NLP libraries
-- No paid APIs required
-
----
-
-**Made with ❤️ for job seekers**
-
-Transform your resume, ace the ATS, land your dream job! 🚀
+MIT.

@@ -8,6 +8,16 @@ from app.models.resume import ResumeData, ExperienceItem, EducationItem, ParsedR
 
 logger = logging.getLogger(__name__)
 
+
+class PDFParseError(Exception):
+    """Raised when a PDF cannot be opened or contains no extractable text.
+
+    Distinguishes a genuine failure (corrupt file, encrypted, image-only scan)
+    from the silent "Unknown" fallback the parser used to return — the upload
+    router maps this to a 422 with an actionable message instead of pretending
+    success.
+    """
+
 # Section header patterns
 SECTION_PATTERNS = {
     "summary": r'\b(summary|profile|objective|about\s+me|professional\s+summary)\b',
@@ -52,8 +62,23 @@ class PDFParser:
             ParsedResume with structured data and metadata
         """
         try:
-            # Open PDF
-            doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+            # Open PDF — raises if the bytes aren't a real PDF.
+            try:
+                doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+            except Exception as exc:
+                raise PDFParseError(
+                    "Could not open the PDF. It may be corrupt or not a valid PDF file."
+                ) from exc
+
+            # Encrypted PDFs need the password before any text is readable.
+            if getattr(doc, "needs_pass", False) or getattr(doc, "is_encrypted", False):
+                try:
+                    doc.close()
+                except Exception:
+                    pass
+                raise PDFParseError(
+                    "This PDF is password-protected. Please upload an unprotected copy."
+                )
 
             # Extract text with layout
             full_text = ""
@@ -61,6 +86,15 @@ class PDFParser:
                 full_text += page.get_text()
 
             doc.close()
+
+            # Image-only / scanned PDFs yield no text. Without OCR there is
+            # nothing to analyze — fail loudly instead of returning a fake
+            # "Unknown" resume that the UI would show as parsed-successfully.
+            if not full_text.strip():
+                raise PDFParseError(
+                    "No text could be extracted from this PDF. It looks like a "
+                    "scanned or image-only document — please upload a text-based PDF."
+                )
 
             # Check formatting issues
             formatting_issues = self._check_ats_formatting(pdf_bytes)
@@ -79,15 +113,14 @@ class PDFParser:
                 sections_found=list(sections.keys())
             )
 
+        except PDFParseError:
+            # Surface the actionable message to the router (mapped to 422).
+            raise
         except Exception as e:
             logger.error(f"Error parsing PDF: {e}")
-            # Return minimal resume with raw text
-            return ParsedResume(
-                data=ResumeData(name="Unknown", raw_text=str(e)),
-                formatting_issues=["Error parsing PDF"],
-                confidence=0.0,
-                sections_found=[]
-            )
+            raise PDFParseError(
+                "Failed to parse the PDF. Please check the file and try again."
+            ) from e
 
     @staticmethod
     def _strip_bullet(line: str) -> str:

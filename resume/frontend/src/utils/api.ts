@@ -33,7 +33,11 @@ export const resumeApi = {
     const formData = new FormData()
     formData.append('file', file)
 
-    const response = await api.post('/resume/upload', formData, {
+    // Route by extension: .docx -> dedicated endpoint, otherwise PDF.
+    const isDocx = (file.name || '').toLowerCase().endsWith('.docx')
+    const url = isDocx ? '/resume/upload-docx' : '/resume/upload'
+
+    const response = await api.post(url, formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },

@@ -3,9 +3,14 @@ from pydantic import BaseModel
 from typing import Optional
 import logging
 
-from app.services.pdf_parser import get_pdf_parser
+from app.services.pdf_parser import get_pdf_parser, PDFParseError
+from app.services.docx_parser import get_docx_parser, DocxParseError
 from app.services.latex_parser import get_latex_parser
 from app.services.keyword_extractor import get_keyword_extractor
+
+# .docx (Office Open XML) magic bytes — it's a ZIP container.
+_DOCX_MAGIC = b"PK\x03\x04"
+_MAX_DOCX_BYTES = 10 * 1024 * 1024  # 10 MB
 
 logger = logging.getLogger(__name__)
 
@@ -64,8 +69,52 @@ async def upload_resume(file: UploadFile = File(...)):
     except HTTPException:
         # Client errors (bad type/size) must pass through, not become a 500.
         raise
+    except PDFParseError as e:
+        # Bad/encrypted/image-only PDFs: surface the actionable message.
+        raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:
         logger.error(f"Error processing resume upload: {e}")
+        raise HTTPException(status_code=500, detail="Failed to process the uploaded resume")
+
+
+@router.post("/upload-docx")
+async def upload_resume_docx(file: UploadFile = File(...)):
+    """Upload and parse a Microsoft Word .docx resume.
+
+    Returns the same structured shape as /upload (PDF). DOCX cannot be
+    losslessly re-exported as the original file, so export will go through the
+    ATS-plain template path (same as PDF input).
+    """
+    try:
+        if not (file.filename or "").lower().endswith(".docx"):
+            raise HTTPException(status_code=400, detail="Only .docx files are supported on this endpoint")
+
+        docx_bytes = await file.read()
+
+        if not docx_bytes:
+            raise HTTPException(status_code=400, detail="Uploaded file is empty")
+        if len(docx_bytes) > _MAX_DOCX_BYTES:
+            raise HTTPException(status_code=413, detail="File is too large (max 10 MB)")
+        if not docx_bytes.startswith(_DOCX_MAGIC):
+            raise HTTPException(status_code=400, detail="File does not look like a valid .docx")
+
+        parser = get_docx_parser()
+        parsed_resume = parser.parse_resume(docx_bytes)
+
+        extractor = get_keyword_extractor()
+        resume_keywords = extractor.extract_from_resume(parsed_resume.data.raw_text or "")
+
+        result = _serialize_parsed(parsed_resume, resume_keywords)
+        # source_format is already set to "docx" by the parser; preserve it.
+        result.setdefault("source_format", "docx")
+        return {"success": True, "data": result}
+
+    except HTTPException:
+        raise
+    except DocxParseError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error processing DOCX upload: {e}")
         raise HTTPException(status_code=500, detail="Failed to process the uploaded resume")
 
 

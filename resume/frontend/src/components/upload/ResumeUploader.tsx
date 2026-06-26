@@ -18,8 +18,9 @@ export function ResumeUploader() {
     async (acceptedFiles: File[]) => {
       const file = acceptedFiles[0]
       if (!file) return
-      if (!file.name.toLowerCase().endsWith('.pdf')) {
-        addToast({ title: 'Invalid file', description: 'Please upload a PDF file', variant: 'destructive' })
+      const name = file.name.toLowerCase()
+      if (!name.endsWith('.pdf') && !name.endsWith('.docx')) {
+        addToast({ title: 'Invalid file', description: 'Please upload a PDF or Word (.docx) file', variant: 'destructive' })
         return
       }
       if (file.size > 10 * 1024 * 1024) {
@@ -30,8 +31,14 @@ export function ResumeUploader() {
       try {
         await uploadResume(file)
         addToast({ title: 'Resume uploaded', description: 'Your resume has been parsed successfully', variant: 'success' })
-      } catch {
-        addToast({ title: 'Upload failed', description: 'Could not parse your resume. Try again.', variant: 'destructive' })
+      } catch (err: any) {
+        addToast({
+          title: 'Upload failed',
+          // Surface the backend's actionable message (e.g. "scanned PDF",
+          // "password-protected") if the interceptor populated err.message.
+          description: err?.message || 'Could not parse your resume. Try again.',
+          variant: 'destructive',
+        })
       }
     },
     [uploadResume, addToast]
@@ -39,7 +46,10 @@ export function ResumeUploader() {
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
-    accept: { 'application/pdf': ['.pdf'] },
+    accept: {
+      'application/pdf': ['.pdf'],
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
+    },
     maxFiles: 1,
     disabled: isLoading,
   })
@@ -115,7 +125,7 @@ export function ResumeUploader() {
           </span>
         )}
         <span className="px-2 py-0.5 text-xs rounded-full bg-secondary text-secondary-foreground">
-          Source: {originalResume.source_format === 'latex' ? 'LaTeX' : 'PDF'}
+          Source: {originalResume.source_format === 'latex' ? 'LaTeX' : originalResume.source_format === 'docx' ? 'Word (.docx)' : 'PDF'}
         </span>
       </div>
     </div>
@@ -126,14 +136,14 @@ export function ResumeUploader() {
       <CardHeader>
         <CardTitle className="text-lg">Upload Your Resume</CardTitle>
         <p className="text-xs text-muted-foreground mt-1">
-          Pick one: paste LaTeX (recommended for exact format on export) or upload a PDF.
+          Pick one: paste LaTeX (recommended for exact format on export) or upload a PDF / Word (.docx).
         </p>
       </CardHeader>
       <CardContent>
         <Tabs defaultValue="latex">
           <TabsList className="grid grid-cols-2 w-full">
             <TabsTrigger value="latex">Paste LaTeX</TabsTrigger>
-            <TabsTrigger value="pdf">Upload PDF</TabsTrigger>
+            <TabsTrigger value="pdf">Upload PDF / Word</TabsTrigger>
           </TabsList>
 
           {/* LaTeX tab */}
@@ -195,15 +205,15 @@ export function ResumeUploader() {
                   <div className="text-4xl">&#128196;</div>
                   <div>
                     <p className="text-sm font-medium">
-                      {isDragActive ? 'Drop your resume here' : 'Drag & drop your resume PDF'}
+                      {isDragActive ? 'Drop your resume here' : 'Drag & drop your resume (PDF or .docx)'}
                     </p>
-                    <p className="text-xs text-muted-foreground mt-1">or click to browse (PDF, max 10MB)</p>
+                    <p className="text-xs text-muted-foreground mt-1">or click to browse (PDF or Word, max 10MB)</p>
                   </div>
                 </div>
               )}
             </div>
             <p className="text-xs text-muted-foreground mt-3">
-              PDF input cannot be exported back layout-exact. For an exact PDF, paste your LaTeX instead.
+              PDF / Word input cannot be exported back layout-exact. For an exact PDF, paste your LaTeX instead.
             </p>
           </TabsContent>
         </Tabs>
