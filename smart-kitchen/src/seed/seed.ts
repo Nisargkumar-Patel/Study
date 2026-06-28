@@ -15,7 +15,7 @@ import 'dotenv/config';
 import { connectDB } from '@/lib/db';
 import { User, Recipe, MealPlan, Staple } from '@/models';
 import { DINNER_SCHEDULE } from './dinnerSchedule';
-import { RECIPE_CATALOG } from './recipeCatalog';
+import { RECIPE_CATALOG, DISH_ALIASES } from './recipeCatalog';
 import { solveRotation, toSolverHousemates } from '@/server/rotation';
 import mongoose from 'mongoose';
 
@@ -54,32 +54,56 @@ async function seed() {
   const users = await User.find().lean();
   console.log(`Users: ${users.length}`);
 
-  // ---- Recipes (catalog) -------------------------------------------------
-  const catalogNames = new Set(RECIPE_CATALOG.map((r) => r.name.toLowerCase()));
-  for (const r of RECIPE_CATALOG) {
-    await Recipe.updateOne({ name: r.name }, { $set: r }, { upsert: true });
-  }
+  // ---- Recipes -----------------------------------------------------------
+  // Resolve every unique schedule dish to its canonical ingredients (direct
+  // name match, else alias) and create a Recipe under the EXACT schedule
+  // spelling so the grocery engine's exact-name lookups keep working. Dishes
+  // with no canonical recipe fall back to a lightweight placeholder.
+  const catalogByName = new Map(RECIPE_CATALOG.map((r) => [r.name.toLowerCase(), r]));
 
-  // ---- Recipes (auto-placeholders for uncovered dishes) ------------------
+  const resolveCanonical = (dish: string) => {
+    const key = dish.trim().toLowerCase();
+    if (catalogByName.has(key)) return catalogByName.get(key)!;
+    const alias = DISH_ALIASES[key];
+    if (alias && catalogByName.has(alias.toLowerCase())) {
+      return catalogByName.get(alias.toLowerCase())!;
+    }
+    return null;
+  };
+
   const allDishes = new Set<string>();
   for (const w of DINNER_SCHEDULE) w.dishes.forEach((d) => allDishes.add(d));
+
+  let covered = 0;
+  let placeholders = 0;
   for (const dish of allDishes) {
-    if (!catalogNames.has(dish.toLowerCase())) {
+    const canonical = resolveCanonical(dish);
+    if (canonical) {
+      covered += 1;
       await Recipe.updateOne(
         { name: dish },
         {
-          $setOnInsert: {
+          $set: {
             name: dish,
-            baseServings: 4,
-            ingredients: [],
-            tags: ['placeholder'],
+            baseServings: canonical.baseServings,
+            ingredients: canonical.ingredients,
+            tags: [],
           },
         },
         { upsert: true }
       );
+    } else {
+      placeholders += 1;
+      await Recipe.updateOne(
+        { name: dish },
+        { $setOnInsert: { name: dish, baseServings: 4, ingredients: [], tags: ['placeholder'] } },
+        { upsert: true }
+      );
     }
   }
-  console.log(`Recipes: ${await Recipe.countDocuments()}`);
+  console.log(
+    `Recipes: ${await Recipe.countDocuments()} (${covered} with ingredients, ${placeholders} placeholders)`
+  );
 
   // ---- Staples -----------------------------------------------------------
   for (const s of STAPLES) {

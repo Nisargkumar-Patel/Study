@@ -132,10 +132,19 @@ the OCR (`/api/ocr`) and SMS reminder (`/api/rotation/notify`) features.
 The provided dinner schedule contained a few obvious date typos (e.g. a 2024 end
 date on a 2025 week, a `03/17/2026` start, `12/30/2024 – 01/05/2024`). These are
 normalized to valid, sensible dates in `src/seed/dinnerSchedule.ts` so the seeder
-never crashes — adjust any specific week in-app if needed. Dishes without a
-hand-authored recipe get a lightweight placeholder (4 servings, no ingredients)
-so every meal plan references a real `Recipe`; fill in ingredient lists over time
-and the scaling/delta engine picks them up automatically.
+never crashes — adjust any specific week in-app if needed.
+
+**Recipe coverage:** all 148 unique dishes in the schedule resolve to authored
+ingredient lists, so every dish contributes scaled quantities to the grocery
+list. The schedule uses many spelling variants for the same dish (e.g. `Dal fry`
+/ `Daal fry`, `Biriyani` / `Biryani`, `Pani puri` / `Panipuri`); these are mapped
+to a single canonical recipe via `DISH_ALIASES` in `src/seed/recipeCatalog.ts`,
+so we keep ~75 canonical recipes instead of 148 near-duplicates. The seeder
+creates a `Recipe` document under each exact schedule spelling (using the
+canonical ingredients) so the grocery engine's exact-name lookups keep working.
+A few closely-related dishes share a canonical recipe (e.g. several rich paneer
+gravies map to `Paneer butter masala`; `Mung pulao` / `Palak pulao` map to
+`Veg pulao`) — refine these in `recipeCatalog.ts` if you want per-dish accuracy.
 
 ---
 
