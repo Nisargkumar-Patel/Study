@@ -6,7 +6,8 @@ python-multipart==0.0.6
 # Pydantic for data validation
 pydantic==2.5.0
 pydantic-settings==2.1.0
-email-validator==2.1.0
+# 2.1.0 was yanked on PyPI (metadata-only issue); 2.1.1 is the fixed re-release.
+email-validator==2.1.1
 
 # PDF processing
 PyMuPDF==1.23.7

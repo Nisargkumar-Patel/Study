@@ -8,7 +8,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { useToast } from '@/components/ui/toast'
 
 export function ResumeUploader() {
-  const { uploadResume, uploadLatex, isLoading, originalResume } = useResumeStore()
+  const { uploadResume, uploadLatex, isLoading, originalResume, startOver } = useResumeStore()
   const { addToast } = useToast()
   const [fileName, setFileName] = useState<string | null>(null)
   const [latexText, setLatexText] = useState('')
@@ -198,7 +198,17 @@ export function ResumeUploader() {
                     {originalResume.name} &bull; {originalResume.skills.length} skills &bull;{' '}
                     {originalResume.experience.length} experiences
                   </p>
-                  <Button variant="outline" size="sm">Upload different resume</Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation() // don't trigger the dropzone's file dialog
+                      startOver()
+                      setFileName(null)
+                    }}
+                  >
+                    Upload different resume
+                  </Button>
                 </div>
               ) : (
                 <div className="flex flex-col items-center gap-3">

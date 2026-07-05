@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { devtools } from 'zustand/middleware'
+import { devtools, persist } from 'zustand/middleware'
 import type { ResumeData, JobData, ATSScore, Suggestion, OptimizeChanges } from '../types'
 import { resumeApi, analysisApi } from '../utils/api'
 
@@ -77,6 +77,7 @@ interface ResumeState {
   undo: () => void
   redo: () => void
   reset: () => void
+  startOver: () => void
   setSelectedTemplate: (template: string) => void
   setCoverLetterEnabled: (enabled: boolean) => void
   setCoverLetter: (text: string | null) => void
@@ -99,7 +100,8 @@ interface ResumeState {
 
 export const useResumeStore = create<ResumeState>()(
   devtools(
-    (set, get) => ({
+    persist(
+      (set, get) => ({
       // Initial state
       originalResume: null,
       currentResume: null,
@@ -122,6 +124,31 @@ export const useResumeStore = create<ResumeState>()(
       currentStep: 0,
 
       // Synchronous actions
+
+      // Full fresh session: clears EVERYTHING including the uploaded resume.
+      // (reset() below keeps the upload and only discards derived state.)
+      // With persistence enabled this is the only way to start over — a
+      // browser refresh now restores the previous session instead of clearing.
+      startOver: () =>
+        set({
+          originalResume: null,
+          currentResume: null,
+          optimizedResume: null,
+          optimizeChanges: null,
+          scoreBefore: null,
+          scoreAfter: null,
+          passesAts: null,
+          jobDescription: null,
+          atsScore: null,
+          suggestions: [],
+          history: [],
+          historyIndex: -1,
+          coverLetterEnabled: false,
+          coverLetter: null,
+          isLoading: false,
+          error: null,
+          currentStep: 0,
+        }),
       setOriginalResume: (resume) =>
         set(() => ({
           originalResume: resume,
@@ -405,7 +432,36 @@ export const useResumeStore = create<ResumeState>()(
           set({ isLoading: false })
         }
       },
-    }),
+      }),
+      {
+        // Survive browser refreshes: without this, an accidental refresh threw
+        // away the parsed resume, job analysis, optimized version, and the
+        // LaTeX source needed for the layout-exact export.
+        name: 'ats-resume-builder',
+        version: 1,
+        partialize: (state) => ({
+          originalResume: state.originalResume,
+          currentResume: state.currentResume,
+          optimizedResume: state.optimizedResume,
+          optimizeChanges: state.optimizeChanges,
+          scoreBefore: state.scoreBefore,
+          scoreAfter: state.scoreAfter,
+          passesAts: state.passesAts,
+          passThreshold: state.passThreshold,
+          jobDescription: state.jobDescription,
+          atsScore: state.atsScore,
+          suggestions: state.suggestions,
+          history: state.history,
+          historyIndex: state.historyIndex,
+          selectedTemplate: state.selectedTemplate,
+          coverLetterEnabled: state.coverLetterEnabled,
+          coverLetter: state.coverLetter,
+          currentStep: state.currentStep,
+          // isLoading / error are transient UI state — never persisted, so a
+          // refresh can't resurrect a stale spinner or error banner.
+        }),
+      }
+    ),
     { name: 'ResumeStore' }
   )
 )
