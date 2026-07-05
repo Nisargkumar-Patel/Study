@@ -35,10 +35,17 @@ export async function sendCookReminder(reminder: CookReminder): Promise<string> 
   const client = getSnsClient();
   const topicArn = process.env.SNS_TOPIC_ARN;
 
+  // Prefer direct SMS to the assigned cook — a reminder is personal. The topic
+  // (which fans out to ALL subscribers) is only a fallback for cooks without a
+  // phone number on file; otherwise every housemate would receive every
+  // cook's reminder.
+  if (!reminder.phone && !topicArn) {
+    throw new Error(`No phone for ${reminder.cookName} and no SNS_TOPIC_ARN fallback`);
+  }
+
   const command = new PublishCommand(
-    topicArn
-      ? { TopicArn: topicArn, Message: message }
-      : {
+    reminder.phone
+      ? {
           PhoneNumber: reminder.phone,
           Message: message,
           MessageAttributes: {
@@ -48,6 +55,7 @@ export async function sendCookReminder(reminder: CookReminder): Promise<string> 
             },
           },
         }
+      : { TopicArn: topicArn, Message: message }
   );
 
   const res = await client.send(command);

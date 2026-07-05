@@ -1,26 +1,26 @@
 /**
  * POST /api/sync   { mutations: QueuedMutation[] }
  *
- * Reconcile a batch of offline IndexedDB mutations into MongoDB, then return the
- * freshly-regenerated canonical grocery list so the client can overwrite its
- * local cache (last-write-wins).
+ * Reconcile a batch of offline IndexedDB mutations into MongoDB, then return
+ * the freshly-regenerated canonical grocery list so the client can overwrite
+ * its local cache (last-write-wins).
  *
  * Supported mutation types:
- *   - TOGGLE_SPICE  { name, inStock }       -> Inventory.inStock
- *   - UPDATE_AMOUNT { name, baseAmount, baseUnit, pantryCategory }
- *                                            -> Inventory measured amount
- *   - ADD_MANUAL    { name, amount, unit }   -> recorded as inventory addition
- *   - CHECK_ITEM    { name, checked }        -> when checked, treat as purchased
- *                                              (acknowledged; UI-only state)
+ *   - TOGGLE_SPICE  { name, inStock }        -> Inventory.inStock
+ *   - UPDATE_AMOUNT { name, baseAmount, ... } -> Inventory measured amount
+ *   - ADD_MANUAL    { name, amount, unit }    -> MealPlan.manualItems (a manual
+ *       addition is something to BUY — it must never be written into pantry
+ *       Inventory, or the delta engine would subtract it from the list)
+ *   - CHECK_ITEM    { id, name, checked }     -> MealPlan.checkedItems, so a
+ *       shopper's in-store progress survives sync and shows on every device
  *
  * Each mutation is idempotent at the item level, so replaying the same queue
  * twice converges to the same state.
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { connectDB } from '@/lib/db';
-import { Inventory, Recipe, Staple, MealPlan } from '@/models';
-import { aggregateWeeklyRequirements } from '@/server/scaling';
-import { buildGroceryList } from '@/server/groceryEngine';
+import { Inventory, MealPlan } from '@/models';
+import { generateGroceryForPlan } from '@/server/generate';
 
 // DB-backed: never statically prerender at build time.
 export const dynamic = 'force-dynamic';
@@ -35,7 +35,14 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   const mutations: Mutation[] = Array.isArray(body.mutations) ? body.mutations : [];
 
+  // Resolve the active plan once — CHECK_ITEM / ADD_MANUAL mutate it.
+  const now = new Date();
+  const plan =
+    (await MealPlan.findOne({ weekStart: { $lte: now }, weekEnd: { $gte: now } })) ||
+    (await MealPlan.findOne().sort({ weekStart: -1 }));
+
   let conflicts = 0;
+  let planDirty = false;
 
   for (const m of mutations) {
     const p = m.payload || {};
@@ -59,7 +66,6 @@ export async function POST(req: NextRequest) {
           break;
 
         case 'UPDATE_AMOUNT':
-        case 'ADD_MANUAL':
           await Inventory.updateOne(
             { name },
             {
@@ -76,9 +82,42 @@ export async function POST(req: NextRequest) {
           );
           break;
 
-        case 'CHECK_ITEM':
-          // Checked-off items are UI state; nothing authoritative to persist.
+        case 'ADD_MANUAL': {
+          if (!plan) {
+            conflicts += 1;
+            break;
+          }
+          const exists = plan.manualItems.some(
+            (mi) => mi.name.toLowerCase() === name.toLowerCase()
+          );
+          if (!exists) {
+            plan.manualItems.push({
+              name,
+              amount: Number(p.amount ?? 1),
+              unit: (String(p.unit || 'pcs') as 'g' | 'ml' | 'pcs'),
+              pantryCategory: String(p.pantryCategory || 'Other'),
+            });
+            planDirty = true;
+          }
           break;
+        }
+
+        case 'CHECK_ITEM': {
+          if (!plan) {
+            conflicts += 1;
+            break;
+          }
+          const id = String(p.id || `${name}|recipe`);
+          const idx = plan.checkedItems.indexOf(id);
+          if (p.checked && idx === -1) {
+            plan.checkedItems.push(id);
+            planDirty = true;
+          } else if (!p.checked && idx !== -1) {
+            plan.checkedItems.splice(idx, 1);
+            planDirty = true;
+          }
+          break;
+        }
 
         default:
           conflicts += 1;
@@ -88,36 +127,9 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // ---- Regenerate the canonical grocery list -----------------------------
-  const now = new Date();
-  const plan =
-    (await MealPlan.findOne({ weekStart: { $lte: now }, weekEnd: { $gte: now } }).lean()) ||
-    (await MealPlan.findOne().sort({ weekStart: -1 }).lean());
+  if (plan && planDirty) await plan.save();
 
-  let groceryList: ReturnType<typeof buildGroceryList> = [];
-  if (plan) {
-    const [recipes, inventory, staples] = await Promise.all([
-      Recipe.find({ name: { $in: plan.dishes } }).lean(),
-      Inventory.find().lean(),
-      Staple.find().lean(),
-    ]);
-    const required = aggregateWeeklyRequirements(recipes as never);
-    groceryList = buildGroceryList(required, inventory as never, staples as never, []);
-  }
+  const groceryList = plan ? await generateGroceryForPlan(plan.toObject()) : [];
 
-  // Shape the list to match the IndexedDB GroceryItemRecord contract.
-  const shaped = groceryList.map((g) => ({
-    id: `${g.name}|${g.source}`,
-    name: g.name,
-    amount: g.amount,
-    unit: g.unit,
-    display: g.display,
-    source: g.source,
-    pantryCategory: g.pantryCategory,
-    checked: g.checked,
-    booleanItem: g.booleanItem,
-    updatedAt: Date.now(),
-  }));
-
-  return NextResponse.json({ groceryList: shaped, conflicts, applied: mutations.length });
+  return NextResponse.json({ groceryList, conflicts, applied: mutations.length });
 }

@@ -40,7 +40,6 @@ interface KitchenDB extends DBSchema {
   mutations: {
     key: number;
     value: QueuedMutation;
-    indexes: { 'by-synced': string };
   };
   meta: {
     key: string;
@@ -49,7 +48,7 @@ interface KitchenDB extends DBSchema {
 }
 
 const DB_NAME = 'smart-kitchen';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 let dbPromise: Promise<IDBPDatabase<KitchenDB>> | null = null;
 
@@ -59,18 +58,21 @@ export function getDB(): Promise<IDBPDatabase<KitchenDB>> {
   }
   if (!dbPromise) {
     dbPromise = openDB<KitchenDB>(DB_NAME, DB_VERSION, {
-      upgrade(db) {
+      upgrade(db, oldVersion, _newVersion, tx) {
         if (!db.objectStoreNames.contains('grocery')) {
           const store = db.createObjectStore('grocery', { keyPath: 'id' });
           store.createIndex('by-category', 'pantryCategory');
         }
         if (!db.objectStoreNames.contains('mutations')) {
-          const store = db.createObjectStore('mutations', {
-            keyPath: 'id',
-            autoIncrement: true,
-          });
-          // store synced as a string ("0"/"1") so it is a valid index key
-          store.createIndex('by-synced', 'synced' as never);
+          db.createObjectStore('mutations', { keyPath: 'id', autoIncrement: true });
+        } else if (oldVersion < 2) {
+          // v1 created a 'by-synced' index keyed on a boolean, which is not a
+          // valid IndexedDB key (the index silently excluded every record).
+          // It was never queried — drop it.
+          const store = tx.objectStore('mutations');
+          if (store.indexNames.contains('by-synced' as never)) {
+            store.deleteIndex('by-synced' as never);
+          }
         }
         if (!db.objectStoreNames.contains('meta')) {
           db.createObjectStore('meta', { keyPath: 'key' });
@@ -109,6 +111,21 @@ export async function applyLocalMutation(
     synced: false,
   });
   await tx.done;
+}
+
+/**
+ * Enqueue a mutation WITHOUT touching the grocery store — for offline changes
+ * that don't map to a grocery line (e.g. a spice toggle whose PATCH failed).
+ */
+export async function queueMutation(
+  mutation: Omit<QueuedMutation, 'id' | 'createdAt' | 'synced'>
+): Promise<void> {
+  const db = await getDB();
+  await db.add('mutations', {
+    ...mutation,
+    createdAt: Date.now(),
+    synced: false,
+  });
 }
 
 export async function getPendingMutations(): Promise<QueuedMutation[]> {

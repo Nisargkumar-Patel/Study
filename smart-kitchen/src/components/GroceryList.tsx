@@ -53,23 +53,25 @@ export default function GroceryList() {
 
   async function toggleChecked(item: GroceryItemRecord) {
     const updated = { ...item, checked: !item.checked };
+    // The server persists checked ids on the MealPlan, so include the line id.
     await applyLocalMutation(updated, {
       type: 'CHECK_ITEM',
-      payload: { name: item.name, checked: updated.checked },
+      payload: { id: item.id, name: item.name, checked: updated.checked },
     });
     setItems((prev) => prev.map((i) => (i.id === item.id ? updated : i)));
-    if (navigator.onLine) void syncNow();
+    if (navigator.onLine) void syncNow().then(hydrate);
   }
 
   async function onManualAdd(rec: GroceryItemRecord) {
-    const next = [...items, rec];
+    // Replace any existing entry with the same id instead of duplicating.
+    const next = [...items.filter((i) => i.id !== rec.id), rec];
     await cacheGroceryList(next);
     await applyLocalMutation(rec, {
       type: 'ADD_MANUAL',
       payload: { name: rec.name, amount: rec.amount, unit: rec.unit },
     });
     setItems(next);
-    if (navigator.onLine) void syncNow();
+    if (navigator.onLine) void syncNow().then(hydrate);
   }
 
   const grouped = useMemo(() => {

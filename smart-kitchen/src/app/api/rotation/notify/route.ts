@@ -58,13 +58,17 @@ export async function POST(req: NextRequest) {
 
   const result = await sendCookReminders(reminders);
 
-  // Mark successfully-targeted entries (only when nothing failed for simplicity).
-  if (result.failures.length === 0) {
-    indicesToMark.forEach((i) => {
+  // Mark reminderSentAt per successful send, so a partial failure doesn't
+  // cause the already-notified cooks to be texted again on retry.
+  const failedCooks = new Set(result.failures.map((f) => f.cookName));
+  let marked = 0;
+  indicesToMark.forEach((i) => {
+    if (!failedCooks.has(plan.rotation[i].cookName)) {
       plan.rotation[i].reminderSentAt = new Date();
-    });
-    await plan.save();
-  }
+      marked += 1;
+    }
+  });
+  if (marked > 0) await plan.save();
 
   return NextResponse.json(result);
 }

@@ -18,6 +18,16 @@ const RotationEntrySchema = new Schema(
   { _id: false }
 );
 
+const ManualItemSchema = new Schema(
+  {
+    name: { type: String, required: true, trim: true },
+    amount: { type: Number, default: 1, min: 0 },
+    unit: { type: String, enum: ['g', 'ml', 'pcs'], default: 'pcs' },
+    pantryCategory: { type: String, default: 'Other' },
+  },
+  { _id: false }
+);
+
 const MealPlanSchema = new Schema(
   {
     weekStart: { type: Date, required: true, unique: true },
@@ -28,6 +38,14 @@ const MealPlanSchema = new Schema(
 
     // Resolved day-wise cooking duty rotation across the 7 housemates.
     rotation: { type: [RotationEntrySchema], default: [] },
+
+    // Ad-hoc one-off grocery additions for this week. Persisted on the plan so
+    // they survive list regeneration and sync across housemates' devices.
+    manualItems: { type: [ManualItemSchema], default: [] },
+
+    // Grocery line ids ("name|source") checked off in the store. Persisted so
+    // an offline sync doesn't wipe a shopper's progress.
+    checkedItems: { type: [String], default: [] },
 
     status: {
       type: String,

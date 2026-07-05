@@ -3,46 +3,55 @@
  * sw.js — Custom service worker for Smart Kitchen (offline-first PWA).
  *
  * Caching strategy:
- *   - App shell (precache): cache-first so the UI boots with no network.
+ *   - Navigations: network-first (fresh HTML when online), falling back to the
+ *     cached page, then offline.html. The successful response is cached so the
+ *     app boots with no network next time.
+ *   - Static assets (/_next/static/*, images, fonts, manifest): cache-first
+ *     with runtime population. Next.js chunk filenames are content-hashed, so
+ *     once cached they are immutable. WITHOUT this, offline navigation would
+ *     serve cached HTML whose script tags 404 — a dead app.
  *   - GET /api/* : stale-while-revalidate so the grocery list shows instantly
  *     from cache, then refreshes in the background.
- *   - Mutating /api/* (POST/PUT/PATCH/DELETE) while offline: we DON'T try to
- *     queue the raw request here. Instead the page persists the change to
- *     IndexedDB and registers a Background Sync. When the 'grocery-sync' event
- *     fires (network restored), we message every client to flush its IndexedDB
- *     mutation queue via /api/sync (see src/lib/sync.ts).
- *
- * This split keeps the typed IndexedDB logic in the app (where the schema lives)
- * and keeps the SW focused on caching + the network-restored wake-up signal.
+ *   - Mutating /api/* (POST/PUT/PATCH/DELETE) while offline: we DON'T queue
+ *     raw requests here. The page persists the change to IndexedDB and
+ *     registers a Background Sync; when 'grocery-sync' fires (network
+ *     restored), we message every client to flush its mutation queue via
+ *     /api/sync (see src/lib/sync.ts). This keeps the typed IndexedDB logic in
+ *     the app and keeps the SW focused on caching + the wake-up signal.
  */
 
-const VERSION = 'v1';
+const VERSION = 'v2';
 const SHELL_CACHE = `sk-shell-${VERSION}`;
+const ASSET_CACHE = `sk-assets-${VERSION}`;
 const API_CACHE = `sk-api-${VERSION}`;
 
-const SHELL_ASSETS = [
-  '/',
-  '/manifest.json',
-  '/offline.html',
-];
+const SHELL_ASSETS = ['/', '/manifest.json', '/offline.html'];
+
+const ASSET_PATTERN = /^\/(_next\/static\/|icons\/)|\.(js|css|png|jpg|jpeg|svg|ico|webp|woff2?)$/;
 
 // ---- Install: precache the app shell --------------------------------------
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(SHELL_CACHE).then((cache) => cache.addAll(SHELL_ASSETS)).then(() => self.skipWaiting())
+    caches
+      .open(SHELL_CACHE)
+      .then((cache) => cache.addAll(SHELL_ASSETS))
+      .then(() => self.skipWaiting())
   );
 });
 
 // ---- Activate: clean up old caches ----------------------------------------
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(
-        keys
-          .filter((k) => ![SHELL_CACHE, API_CACHE].includes(k))
-          .map((k) => caches.delete(k))
+    caches
+      .keys()
+      .then((keys) =>
+        Promise.all(
+          keys
+            .filter((k) => ![SHELL_CACHE, ASSET_CACHE, API_CACHE].includes(k))
+            .map((k) => caches.delete(k))
+        )
       )
-    ).then(() => self.clients.claim())
+      .then(() => self.clients.claim())
   );
 });
 
@@ -54,18 +63,18 @@ self.addEventListener('fetch', (event) => {
   // Only handle same-origin requests.
   if (url.origin !== self.location.origin) return;
 
-  // Never intercept non-GET — let mutations hit the network; if they fail while
-  // offline, the page has already mirrored the change into IndexedDB.
+  // Never intercept non-GET — let mutations hit the network; if they fail
+  // while offline, the page has already mirrored the change into IndexedDB.
   if (request.method !== 'GET') return;
 
-  // API GETs: stale-while-revalidate.
   if (url.pathname.startsWith('/api/')) {
     event.respondWith(staleWhileRevalidate(request));
-    return;
+  } else if (request.mode === 'navigate') {
+    event.respondWith(networkFirstNavigation(request));
+  } else if (ASSET_PATTERN.test(url.pathname)) {
+    event.respondWith(cacheFirstAsset(request));
   }
-
-  // Navigation / shell: cache-first, falling back to offline page.
-  event.respondWith(cacheFirst(request));
+  // Anything else falls through to the network untouched.
 });
 
 async function staleWhileRevalidate(request) {
@@ -80,21 +89,31 @@ async function staleWhileRevalidate(request) {
   return cached || network;
 }
 
-async function cacheFirst(request) {
+async function networkFirstNavigation(request) {
   const cache = await caches.open(SHELL_CACHE);
+  try {
+    const res = await fetch(request);
+    if (res && res.ok) cache.put(request, res.clone());
+    return res;
+  } catch (err) {
+    return (
+      (await cache.match(request)) ||
+      (await cache.match('/')) ||
+      (await cache.match('/offline.html')) ||
+      Response.error()
+    );
+  }
+}
+
+async function cacheFirstAsset(request) {
+  const cache = await caches.open(ASSET_CACHE);
   const cached = await cache.match(request);
   if (cached) return cached;
   try {
     const res = await fetch(request);
-    if (res && res.ok && request.mode === 'navigate') {
-      cache.put(request, res.clone());
-    }
+    if (res && res.ok) cache.put(request, res.clone());
     return res;
   } catch (err) {
-    // Offline navigation fallback.
-    if (request.mode === 'navigate') {
-      return (await cache.match('/offline.html')) || Response.error();
-    }
     return Response.error();
   }
 }

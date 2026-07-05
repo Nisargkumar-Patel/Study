@@ -25,6 +25,17 @@ export async function POST(req: NextRequest) {
     }
 
     const bytes = new Uint8Array(await file.arrayBuffer());
+
+    // Synchronous Textract (AnalyzeExpense with inline bytes) caps at 10 MB —
+    // reject early with a clear message instead of an opaque AWS error.
+    const MAX_BYTES = 10 * 1024 * 1024;
+    if (bytes.byteLength > MAX_BYTES) {
+      return NextResponse.json(
+        { error: 'Receipt image exceeds the 10 MB Textract limit — resize and retry.' },
+        { status: 413 }
+      );
+    }
+
     const extracted = await parseReceipt(bytes);
     const records = toInventoryRecords(extracted);
 

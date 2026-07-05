@@ -8,6 +8,7 @@
  * inventory `inStock` flag on change.
  */
 import { useEffect, useState } from 'react';
+import { queueMutation } from '@/lib/idb';
 
 interface SpiceItem {
   _id: string;
@@ -37,11 +38,21 @@ export default function SpiceToggle() {
     setSpices((prev) =>
       prev.map((s) => (s._id === item._id ? { ...s, inStock: next } : s))
     );
-    await fetch('/api/inventory', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: item.name, inStock: next, lastUpdatedBy: 'spice-toggle' }),
-    });
+    try {
+      const res = await fetch('/api/inventory', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: item.name, inStock: next, lastUpdatedBy: 'spice-toggle' }),
+      });
+      if (!res.ok) throw new Error(`PATCH failed: ${res.status}`);
+    } catch {
+      // Offline (or server error): queue the toggle so the sync engine replays
+      // it when connectivity returns. The optimistic UI state stays correct.
+      await queueMutation({
+        type: 'TOGGLE_SPICE',
+        payload: { name: item.name, inStock: next },
+      });
+    }
   }
 
   return (

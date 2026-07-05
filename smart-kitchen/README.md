@@ -115,15 +115,36 @@ the OCR (`/api/ocr`) and SMS reminder (`/api/rotation/notify`) features.
 
 ## 📴 Offline Behavior
 
-1. The service worker precaches the app shell and serves `/api/*` GETs
-   **stale-while-revalidate**.
+1. The service worker precaches the app shell, runtime-caches all
+   `/_next/static/*` JS/CSS chunks (cache-first — they're content-hashed and
+   immutable), serves navigations **network-first** with a cached fallback, and
+   serves `/api/*` GETs **stale-while-revalidate**.
 2. The grocery list is mirrored in **IndexedDB**, so it opens instantly with no
    network (e.g. inside a store).
-3. Checking items off / editing while offline writes to IndexedDB **and** queues
-   a mutation.
+3. Checking items off / adding manual items / toggling spices while offline
+   writes to IndexedDB **and** queues a mutation.
 4. On reconnect (`online` event or Background Sync `grocery-sync`), the queue is
    replayed to `/api/sync`, which returns the canonical list (last-write-wins)
    and refreshes the cache.
+5. Checked-off state and manual additions are **persisted on the week's
+   `MealPlan`** (`checkedItems`, `manualItems`), so they survive list
+   regeneration and are shared across every housemate's device.
+
+## ⚠️ Known Limitations
+
+- **No authentication** — the API trusts anyone who can reach it. Fine on a
+  private home network; put it behind auth (e.g. NextAuth, or a reverse-proxy
+  basic auth) before exposing it to the internet.
+- **Receipt OCR is synchronous** — Textract `AnalyzeExpense` with inline bytes
+  handles single-page images up to 10 MB (the API returns 413 beyond that).
+  Multi-page PDFs need the async Textract flow via the `RECEIPTS_S3_BUCKET`
+  staging bucket (env var reserved, not yet wired).
+- **SNS topic mode is a fallback only** — cook reminders are sent as direct
+  per-cook SMS; the `SNS_TOPIC_ARN` topic (which broadcasts to all
+  subscribers) is used only for cooks with no phone number on file.
+- **Background Sync API** is Chromium-only; other browsers fall back to the
+  `online`-event flush, which requires the tab to be open when connectivity
+  returns.
 
 ---
 

@@ -131,12 +131,33 @@ export function buildGroceryList(
     });
   }
 
+  // Merge duplicate measured lines with the same name + base unit (e.g. Rice
+  // needed by recipes AND topped up as a staple) into a single summed line, so
+  // the shopper sees one "Rice: 11 kg" instead of two partial rows. Summing is
+  // mathematically correct: recipe delta covers this week's cooking, staple
+  // delta restores the standing baseline, and both draw from separate stock
+  // pools (Inventory vs Staple.currentAmount).
+  const merged = new Map<string, GroceryLineItem>();
+  for (const item of list) {
+    const key = item.booleanItem
+      ? `spice:${item.name.toLowerCase()}`
+      : `${item.name.toLowerCase()}|${item.unit}`;
+    const existing = merged.get(key);
+    if (existing && !existing.booleanItem && !item.booleanItem) {
+      existing.amount += item.amount;
+      existing.display = formatBase({ amount: existing.amount, unit: existing.unit });
+    } else if (!existing) {
+      merged.set(key, { ...item });
+    }
+  }
+
   // Stable sort: group by category, then name, for a tidy in-store list.
-  list.sort(
+  const result = [...merged.values()];
+  result.sort(
     (a, b) =>
       a.pantryCategory.localeCompare(b.pantryCategory) ||
       a.name.localeCompare(b.name)
   );
 
-  return list;
+  return result;
 }
