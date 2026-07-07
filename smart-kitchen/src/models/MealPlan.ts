@@ -36,7 +36,7 @@ const MealPlanSchema = new Schema(
     // Ordered dish names planned for the week (references Recipe.name).
     dishes: { type: [String], default: [] },
 
-    // Resolved day-wise cooking duty rotation across the 7 housemates.
+    // Resolved day-wise cooking duty rotation across the housemates.
     rotation: { type: [RotationEntrySchema], default: [] },
 
     // Ad-hoc one-off grocery additions for this week. Persisted on the plan so

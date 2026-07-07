@@ -1,10 +1,13 @@
 /**
- * scaling.ts — Dynamic Portion Scaling Algorithm (7 People).
+ * scaling.ts — Dynamic Portion Scaling Algorithm.
  *
  * Each recipe is authored for `baseServings` people. To feed the household we
- * apply a multiplier of `HOUSEHOLD_SIZE / baseServings` to every ingredient.
+ * apply a multiplier of `householdSize / baseServings` to every ingredient.
+ * The household size is derived from the number of ACTIVE members (see
+ * generate.ts) so the app works for any house, not a fixed count; the
+ * HOUSEHOLD_SIZE env var is only a fallback before the first member exists.
  *
- *   e.g. a Dal Fry authored for 4 people, scaled for 7:
+ *   e.g. a Dal Fry authored for 4 people, scaled for a house of 7:
  *        multiplier = 7 / 4 = 1.75
  *        300 g toor dal  ->  525 g
  *

@@ -39,9 +39,10 @@ export default function StaplesPanel() {
 
   return (
     <div className="rounded-xl bg-white p-4 shadow-sm">
-      <h2 className="mb-1 text-lg font-semibold">Household Staples (×7)</h2>
+      <h2 className="mb-1 text-lg font-semibold">Household Staples</h2>
       <p className="mb-3 text-sm text-gray-500">
-        Targets sized for 7 people. Any shortfall is injected into the grocery list.
+        Set each target to what your house goes through in a week. Any shortfall
+        is injected into the grocery list automatically.
       </p>
       <ul className="divide-y divide-gray-100">
         {staples.map((s) => {

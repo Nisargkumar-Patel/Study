@@ -1,10 +1,11 @@
 # 🍳 Smart Kitchen — Inventory & Meal Planner
 
 An **offline-first Progressive Web App (PWA)** that automates weekly dinner
-planning for a shared household of **exactly 7 housemates**. It selects a weekly
-menu, scales every recipe to 7 servings, subtracts what's already in the pantry,
-tops up household staples, and produces a **deduplicated, mathematically precise
-grocery list** that you can use **offline inside a grocery store**.
+planning for **any shared household** — 2 people or 12. It selects a weekly
+menu, scales every recipe to the number of active members, subtracts what's
+already in the pantry, tops up household staples, and produces a
+**deduplicated, mathematically precise grocery list** that you can use
+**offline inside a grocery store**.
 
 > Built with Next.js (App Router) · TypeScript · Tailwind CSS · MongoDB/Mongoose
 > · IndexedDB (`idb`) · a custom Service Worker · AWS Textract & AWS SNS.
@@ -85,15 +86,37 @@ smart-kitchen/
 cd smart-kitchen
 npm install
 
-cp .env.example .env.local      # fill in MONGODB_URI (+ AWS keys if using OCR/SMS)
+cp .env.example .env.local      # set MONGODB_URI, HOUSEHOLD_PASSCODE, AUTH_SECRET
 
-npm run seed                    # load the dinner schedule, 7 housemates, staples
+npm run seed                    # (optional) sample dinner schedule + staples
 npm run dev                     # http://localhost:3000
 ```
 
 ### Environment variables
-See `.env.example`. At minimum set `MONGODB_URI`. AWS keys are only needed for
-the OCR (`/api/ocr`) and SMS reminder (`/api/rotation/notify`) features.
+See `.env.example`. Required: `MONGODB_URI`, `HOUSEHOLD_PASSCODE`,
+`AUTH_SECRET`. AWS keys are only needed for the OCR (`/api/ocr`) and SMS
+reminder (`/api/rotation/notify`) features.
+
+## 🔐 Authentication & Onboarding a New Household
+
+The whole app sits behind a session gate (`src/middleware.ts`):
+
+1. Deploy the app and set a `HOUSEHOLD_PASSCODE` (plus a random `AUTH_SECRET`).
+2. Share the passcode with your housemates.
+3. Each person opens the app and signs in with **their name + the passcode**.
+   A new name automatically **joins the household** and takes the next cooking
+   rotation slot — no fixed member count, no admin ceremony.
+4. Sessions are HMAC-signed, HTTP-only cookies valid for 90 days, so offline
+   queued changes still sync when the phone reconnects days later.
+
+Manage members in the **🏠 House** tab: add/remove housemates, mark someone
+"away" (they're skipped by the rotation **and** excluded from portion scaling),
+and set the E.164 phone number used for SMS cooking reminders. The seeded 7
+sample members can be removed there after your real household signs in.
+
+Unauthenticated API calls get `401`; page visits redirect to `/login`. PWA
+assets (`/sw.js`, `/manifest.json`, icons, the offline page) stay public so the
+service worker can always install.
 
 ---
 
@@ -130,21 +153,42 @@ the OCR (`/api/ocr`) and SMS reminder (`/api/rotation/notify`) features.
    `MealPlan`** (`checkedItems`, `manualItems`), so they survive list
    regeneration and are shared across every housemate's device.
 
+## 📱 Make It a Mobile App
+
+Three paths, in increasing order of effort:
+
+1. **Install the PWA (zero extra work — recommended first).** Host the app
+   (Vercel + MongoDB Atlas free tiers work), then on each phone:
+   *Android/Chrome:* menu → **Add to Home screen** (Chrome offers an install
+   banner automatically). *iPhone/Safari:* Share → **Add to Home Screen**.
+   You get a full-screen app with an icon, offline grocery list, and sync —
+   this is exactly what the manifest + service worker were built for.
+2. **Play Store via TWA (a day of work).** Use
+   [Bubblewrap](https://github.com/GoogleChromeLabs/bubblewrap)
+   (`npx @bubblewrap/cli init --manifest https://your-host/manifest.json`) to
+   wrap the hosted PWA in a Trusted Web Activity and publish the signed AAB to
+   Google Play. No app code changes.
+3. **Both stores via Capacitor (a weekend).** `npm i @capacitor/core
+   @capacitor/ios @capacitor/android`, point the Capacitor WebView at your
+   hosted URL (`server.url` in `capacitor.config.ts`), and build in
+   Xcode/Android Studio. This unlocks native push notifications (replacing
+   SMS), camera-native receipt capture, and App Store distribution. The
+   backend/API stays exactly as-is.
+
 ## ⚠️ Known Limitations
 
-- **No authentication** — the API trusts anyone who can reach it. Fine on a
-  private home network; put it behind auth (e.g. NextAuth, or a reverse-proxy
-  basic auth) before exposing it to the internet.
-- **Receipt OCR is synchronous** — Textract `AnalyzeExpense` with inline bytes
-  handles single-page images up to 10 MB (the API returns 413 beyond that).
-  Multi-page PDFs need the async Textract flow via the `RECEIPTS_S3_BUCKET`
-  staging bucket (env var reserved, not yet wired).
+- **Single shared passcode** — auth keeps strangers out and identifies members,
+  but housemates are trusted equally (any member can manage the household).
+  There are no per-user passwords or roles.
+- **Async OCR polls in-request** — multi-page/large receipts poll Textract for
+  up to ~50 s inside the API call (`maxDuration = 60`). On serverless plans
+  with shorter function limits, retry the upload or run on a Node server.
 - **SNS topic mode is a fallback only** — cook reminders are sent as direct
   per-cook SMS; the `SNS_TOPIC_ARN` topic (which broadcasts to all
   subscribers) is used only for cooks with no phone number on file.
-- **Background Sync API** is Chromium-only; other browsers fall back to the
-  `online`-event flush, which requires the tab to be open when connectivity
-  returns.
+- **Background Sync API** is Chromium-only; other browsers use the built-in
+  fallbacks (30 s heartbeat while pending mutations exist + flush on tab
+  focus/`online`), which require the app to be opened for the sync to run.
 
 ---
 

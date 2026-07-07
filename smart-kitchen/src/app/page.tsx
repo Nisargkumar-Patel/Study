@@ -12,15 +12,17 @@ import GroceryList from '@/components/GroceryList';
 import StaplesPanel from '@/components/StaplesPanel';
 import SpiceToggle from '@/components/SpiceToggle';
 import RotationSchedule from '@/components/RotationSchedule';
+import HouseholdPanel from '@/components/HouseholdPanel';
 import { cacheGroceryList, type GroceryItemRecord } from '@/lib/idb';
 
-type Tab = 'grocery' | 'staples' | 'spices' | 'rotation';
+type Tab = 'grocery' | 'staples' | 'spices' | 'rotation' | 'household';
 
 const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'grocery', label: 'Grocery', icon: '🛒' },
   { id: 'staples', label: 'Staples', icon: '🥛' },
   { id: 'spices', label: 'Spices', icon: '🌶️' },
   { id: 'rotation', label: 'Rotation', icon: '👩‍🍳' },
+  { id: 'household', label: 'House', icon: '🏠' },
 ];
 
 export default function Dashboard() {
@@ -50,7 +52,7 @@ export default function Dashboard() {
       <header className="mb-5 flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-brand-dark">🍳 Smart Kitchen</h1>
-          <p className="text-sm text-gray-500">Meal planner for 7 housemates</p>
+          <p className="text-sm text-gray-500">Meal planner for the whole house</p>
         </div>
         <button
           onClick={generate}
@@ -73,6 +75,7 @@ export default function Dashboard() {
         {tab === 'staples' && <StaplesPanel />}
         {tab === 'spices' && <SpiceToggle />}
         {tab === 'rotation' && <RotationSchedule />}
+        {tab === 'household' && <HouseholdPanel />}
       </section>
 
       {/* Bottom tab bar (mobile-first) */}

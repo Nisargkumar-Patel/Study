@@ -4,7 +4,7 @@
  *   npm run seed
  *
  * Populates:
- *   - 7 housemates (Users) with rotation slots 0..6
+ *   - 7 sample housemates (Users) — replaceable via the House tab / login
  *   - Recipes (catalog + auto-placeholders for every dish in the schedule)
  *   - MealPlans for every week, with a solved cooking-duty rotation
  *   - A starter set of Staples sized for 7 people

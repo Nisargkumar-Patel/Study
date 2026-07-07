@@ -31,7 +31,7 @@ export interface SolverHousemate {
 /**
  * Solve the day-wise rotation.
  *
- * @param housemates  all 7 housemates (active flag respected)
+ * @param housemates  all housemates (active flag respected)
  * @param dishes      ordered dish names for the week
  * @param weekStart   first cooking date of the week
  * @param weekIndex   monotonically increasing week number; advances the offset

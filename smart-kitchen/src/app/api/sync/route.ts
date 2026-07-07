@@ -21,6 +21,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { connectDB } from '@/lib/db';
 import { Inventory, MealPlan } from '@/models';
 import { generateGroceryForPlan } from '@/server/generate';
+import { getSession } from '@/lib/auth';
 
 // DB-backed: never statically prerender at build time.
 export const dynamic = 'force-dynamic';
@@ -34,6 +35,10 @@ export async function POST(req: NextRequest) {
   await connectDB();
   const body = await req.json().catch(() => ({}));
   const mutations: Mutation[] = Array.isArray(body.mutations) ? body.mutations : [];
+
+  // Attribute offline edits to the signed-in member for the audit trail.
+  const session = await getSession(req);
+  const editor = session?.name || 'offline-sync';
 
   // Resolve the active plan once — CHECK_ITEM / ADD_MANUAL mutate it.
   const now = new Date();
@@ -58,7 +63,7 @@ export async function POST(req: NextRequest) {
           await Inventory.updateOne(
             { name },
             {
-              $set: { inStock: Boolean(p.inStock), lastUpdatedBy: 'offline-sync' },
+              $set: { inStock: Boolean(p.inStock), lastUpdatedBy: editor },
               $setOnInsert: { pantryCategory: 'Spices', baseUnit: 'g' },
             },
             { upsert: true }
@@ -71,7 +76,7 @@ export async function POST(req: NextRequest) {
             {
               $set: {
                 baseAmount: Number(p.baseAmount ?? p.amount ?? 0),
-                lastUpdatedBy: 'offline-sync',
+                lastUpdatedBy: editor,
               },
               $setOnInsert: {
                 baseUnit: String(p.unit || p.baseUnit || 'pcs'),

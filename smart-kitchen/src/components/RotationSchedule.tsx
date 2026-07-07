@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * RotationSchedule — 7-housemate cooking-duty matrix for the active week.
+ * RotationSchedule — household cooking-duty matrix for the active week.
  *
  * Shows each day's dish + assigned cook, lets an admin recompute the rotation,
  * and dispatches AWS SNS SMS reminders (all reminders for the week, or just the

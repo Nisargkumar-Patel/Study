@@ -4,7 +4,7 @@ import ServiceWorkerRegister from '@/components/ServiceWorkerRegister';
 
 export const metadata: Metadata = {
   title: 'Smart Kitchen — Inventory & Meal Planner',
-  description: 'Offline-first meal planning and grocery delta engine for 7 housemates.',
+  description: 'Offline-first meal planning and grocery delta engine for shared households.',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,

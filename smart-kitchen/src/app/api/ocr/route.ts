@@ -1,20 +1,28 @@
 /**
  * POST /api/ocr  (multipart/form-data, field "receipt")
  *
- * Accept an uploaded receipt image, run AWS Textract AnalyzeExpense, map the
- * extracted line items to inventory-ingestion records, and (optionally) upsert
- * them into the Inventory collection.
+ * Accept an uploaded receipt, run AWS Textract, map the extracted line items
+ * to inventory-ingestion records, and (optionally) upsert them into the
+ * Inventory collection.
  *
- * Query/body flag `?commit=true` performs the inventory upsert; otherwise we
- * return the parsed records for the user to review & confirm in the UI first
- * (recommended, since receipt units are ambiguous).
+ * Routing:
+ *   - single-page image <= 10 MB  -> synchronous AnalyzeExpense (inline bytes)
+ *   - PDF or > 10 MB              -> async StartExpenseAnalysis via the
+ *                                    RECEIPTS_S3_BUCKET staging bucket
+ *
+ * Query flag `?commit=true` performs the inventory upsert; otherwise we return
+ * the parsed records for the user to review & confirm first (recommended,
+ * since receipt units are ambiguous).
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { connectDB } from '@/lib/db';
 import { Inventory } from '@/models';
-import { parseReceipt, toInventoryRecords } from '@/server/textract';
+import { parseReceipt, parseReceiptAsync, toInventoryRecords } from '@/server/textract';
 
 export const runtime = 'nodejs'; // Textract SDK needs the Node runtime
+export const maxDuration = 60; // async Textract jobs poll for up to ~50s
+
+const SYNC_MAX_BYTES = 10 * 1024 * 1024;
 
 export async function POST(req: NextRequest) {
   try {
@@ -25,18 +33,26 @@ export async function POST(req: NextRequest) {
     }
 
     const bytes = new Uint8Array(await file.arrayBuffer());
+    const contentType = file.type || 'image/jpeg';
+    const isPdf =
+      contentType === 'application/pdf' ||
+      ('name' in file && String((file as File).name).toLowerCase().endsWith('.pdf'));
+    const needsAsync = isPdf || bytes.byteLength > SYNC_MAX_BYTES;
 
-    // Synchronous Textract (AnalyzeExpense with inline bytes) caps at 10 MB —
-    // reject early with a clear message instead of an opaque AWS error.
-    const MAX_BYTES = 10 * 1024 * 1024;
-    if (bytes.byteLength > MAX_BYTES) {
+    if (needsAsync && !process.env.RECEIPTS_S3_BUCKET) {
       return NextResponse.json(
-        { error: 'Receipt image exceeds the 10 MB Textract limit — resize and retry.' },
+        {
+          error:
+            'This receipt needs the async Textract flow (PDF or over 10 MB). ' +
+            'Set RECEIPTS_S3_BUCKET, or upload a single-page image under 10 MB.',
+        },
         { status: 413 }
       );
     }
 
-    const extracted = await parseReceipt(bytes);
+    const extracted = needsAsync
+      ? await parseReceiptAsync(bytes, contentType)
+      : await parseReceipt(bytes);
     const records = toInventoryRecords(extracted);
 
     const commit = req.nextUrl.searchParams.get('commit') === 'true';
@@ -59,6 +75,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       committed: commit,
+      mode: needsAsync ? 'async' : 'sync',
       itemCount: records.length,
       records,
     });

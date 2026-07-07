@@ -1,7 +1,7 @@
 {
   "name": "Smart Kitchen Inventory & Meal Planner",
   "short_name": "Smart Kitchen",
-  "description": "Offline-first meal planning, inventory, and grocery delta engine for a 7-housemate household.",
+  "description": "Offline-first meal planning, inventory, and grocery delta engine for shared households.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

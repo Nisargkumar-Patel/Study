@@ -80,18 +80,39 @@ export async function pullLatest(): Promise<void> {
 /**
  * Wire automatic sync triggers. Call once on app mount.
  *   - Replays the queue whenever the browser fires `online`.
- *   - Registers a Background Sync tag so the SW can flush even if the tab closed.
+ *   - Registers a Background Sync tag so the SW can flush even if the tab closed
+ *     (Chromium only).
+ *   - Fallback for browsers WITHOUT Background Sync (Safari, Firefox): a
+ *     30-second heartbeat that flushes any pending mutations while online, plus
+ *     a flush whenever the tab regains focus — covering "phone came back online
+ *     while the app was backgrounded".
  */
 export function initAutoSync(): () => void {
   const onOnline = () => void syncNow();
   window.addEventListener('online', onOnline);
 
   // Best-effort Background Sync registration.
-  if ('serviceWorker' in navigator && 'SyncManager' in window) {
+  const hasBackgroundSync = 'serviceWorker' in navigator && 'SyncManager' in window;
+  if (hasBackgroundSync) {
     navigator.serviceWorker.ready
       .then((reg) => (reg as ServiceWorkerRegistration & { sync?: { register(tag: string): Promise<void> } }).sync?.register('grocery-sync'))
-      .catch(() => {/* sync API unavailable — rely on the online listener */});
+      .catch(() => {/* sync API unavailable — rely on the fallbacks below */});
   }
+
+  // Heartbeat fallback: only fires a network call when there is actually
+  // something queued, so it costs nothing in the steady state.
+  const heartbeat = setInterval(async () => {
+    if (!navigator.onLine) return;
+    const pending = await getPendingMutations();
+    if (pending.length > 0) void syncNow();
+  }, 30_000);
+
+  // Flush when the tab becomes visible again (e.g. returning to the app after
+  // leaving the store's dead zone with the phone in your pocket).
+  const onVisible = () => {
+    if (document.visibilityState === 'visible' && navigator.onLine) void syncNow();
+  };
+  document.addEventListener('visibilitychange', onVisible);
 
   // Listen for the SW asking the page to flush (it can't touch IndexedDB schema
   // typed helpers, so it delegates the actual replay back to the page).
@@ -102,6 +123,8 @@ export function initAutoSync(): () => void {
 
   return () => {
     window.removeEventListener('online', onOnline);
+    document.removeEventListener('visibilitychange', onVisible);
+    clearInterval(heartbeat);
     navigator.serviceWorker?.removeEventListener('message', onMessage);
   };
 }
