@@ -51,6 +51,8 @@ SKILL_DISPLAY_CASE = {
     "docker": "Docker", "redis": "Redis", "kafka": "Kafka", "django": "Django",
     "flask": "Flask", "fastapi": "FastAPI", "python": "Python", "java": "Java",
     "javascript": "JavaScript", "typescript": "TypeScript", "terraform": "Terraform",
+    "gitlab": "GitLab", "github": "GitHub", "qa automation": "QA Automation",
+    "devops": "DevOps", "mssql": "MSSQL", "powershell": "PowerShell",
 }
 
 
@@ -558,15 +560,27 @@ class ResumeOptimizer:
         return missing[:20]  # Top 20
 
     def _get_missing_skills(self, resume_data: Dict, job_data: Dict) -> List[str]:
-        """Get skills from job missing in resume"""
+        """Get skills from job missing in resume.
+
+        A skill is only "missing" if it appears NEITHER in the skills list
+        (canonical match) NOR anywhere in the resume text. The text check stops
+        the optimizer from adding duplicates of compound/qualified entries the
+        candidate already lists — e.g. "SQL (Learning)", "CI/CD (Jenkins/
+        GitLab)", "Selenium WebDriver" already cover sql/jenkins/gitlab/ci-cd/
+        selenium."""
         job_skills = set()
 
         if isinstance(job_data.get("keywords"), dict):
             job_skills.update(job_data["keywords"].get("required_skills", []))
 
         resume_canon = {canonicalize(skill) for skill in resume_data.get("skills", [])}
+        resume_blob = normalize_text(self._get_resume_text(resume_data))
 
-        missing = [skill for skill in job_skills if canonicalize(skill) not in resume_canon]
+        missing = []
+        for skill in job_skills:
+            c = canonicalize(skill)
+            if c not in resume_canon and not term_matches_text(c, resume_blob):
+                missing.append(skill)
         return missing
 
     def _get_resume_text(self, resume_data: Dict) -> str:

@@ -163,15 +163,19 @@ class ATSScorer:
         elif isinstance(job_data.get("required_skills"), list):
             job_skills.update(job_data.get("required_skills", []))
 
-        # Get resume skills
-        resume_skills = set(resume_data.get("skills", []))
+        # Match on canonical form (spelling/acronym-aware) OR on the resume's
+        # full text. The text fallback matters for compound/qualified skill
+        # entries like "SQL (Learning)", "CI/CD (Jenkins/GitLab)" or "Selenium
+        # WebDriver", whose canonical form doesn't equal the JD's bare term —
+        # without it those count as "missing" and the optimizer duplicates them.
+        resume_blob = normalize_text(self._get_resume_text(resume_data))
+        resume_skills_canon = {canonicalize(skill) for skill in resume_data.get("skills", [])}
 
-        # Match on canonical form (spelling/acronym-aware)
         job_skills_canon = {canonicalize(skill) for skill in job_skills}
-        resume_skills_canon = {canonicalize(skill) for skill in resume_skills}
-
-        # Calculate match
-        matched = job_skills_canon & resume_skills_canon
+        matched = {
+            c for c in job_skills_canon
+            if c in resume_skills_canon or term_matches_text(c, resume_blob)
+        }
         match_count = len(matched)
         total = len(job_skills_canon) if job_skills_canon else 1
 
@@ -375,6 +379,13 @@ class ATSScorer:
         matched = [kw for kw in job_kw_set if term_matches_text(kw, resume_blob)]
         return matched
 
+    def _skill_present(self, skill: str, resume_canon: set, resume_blob: str) -> bool:
+        """A JD skill counts as present if it canonical-matches a listed skill
+        OR appears anywhere in the resume text (catches compound/qualified
+        entries like "SQL (Learning)" or "Selenium WebDriver")."""
+        c = canonicalize(skill)
+        return c in resume_canon or term_matches_text(c, resume_blob)
+
     def _get_missing_skills(self, resume_data: Dict, job_data: Dict) -> List[str]:
         """Get skills required by job but missing from resume"""
         job_skills = set()
@@ -383,9 +394,10 @@ class ATSScorer:
             job_skills.update(job_data["keywords"].get("required_skills", []))
 
         resume_canon = {canonicalize(skill) for skill in resume_data.get("skills", [])}
+        resume_blob = normalize_text(self._get_resume_text(resume_data))
 
-        missing = [skill for skill in job_skills if canonicalize(skill) not in resume_canon]
-        return missing
+        return [s for s in job_skills
+                if not self._skill_present(s, resume_canon, resume_blob)]
 
     def _get_matched_skills(self, resume_data: Dict, job_data: Dict) -> List[str]:
         """Get skills present in both job and resume"""
@@ -395,9 +407,10 @@ class ATSScorer:
             job_skills.update(job_data["keywords"].get("required_skills", []))
 
         resume_canon = {canonicalize(skill) for skill in resume_data.get("skills", [])}
+        resume_blob = normalize_text(self._get_resume_text(resume_data))
 
-        matched = [skill for skill in job_skills if canonicalize(skill) in resume_canon]
-        return matched
+        return [s for s in job_skills
+                if self._skill_present(s, resume_canon, resume_blob)]
 
     def _generate_suggestions_summary(self, keyword_score, skills_score,
                                      experience_score, education_score,

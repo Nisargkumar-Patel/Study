@@ -174,3 +174,43 @@ def test_original_resume_is_not_mutated(optimizer):
     # The input dict must be untouched (deep copy used internally).
     assert resume["skills"] == ["Python", "JavaScript"]
     assert resume["summary"] == "Software developer responsible for building web apps."
+
+
+def test_compound_skill_entries_do_not_get_duplicated():
+    """Regression: 'SQL (Learning)', 'CI/CD (Jenkins/GitLab)' and 'Selenium
+    WebDriver' already cover sql/ci-cd/jenkins/gitlab/selenium — the optimizer
+    must not re-add those as separate skills, and the scorer must count them
+    as matched."""
+    from app.services.resume_optimizer import get_resume_optimizer
+    from app.services.ats_scorer import get_ats_scorer
+
+    resume = {
+        "name": "T", "summary": "QA engineer.",
+        "experience": [{"title": "QA Automation Engineer", "company": "X",
+                        "start_date": "2020", "end_date": "Present",
+                        "bullets": ["Automated tests with Selenium WebDriver."]}],
+        "education": [], "certifications": [],
+        "skills": ["SQL (Learning)", "CI/CD (Jenkins/GitLab)", "Selenium WebDriver", "Python"],
+        "raw_text": "",
+    }
+    job = {
+        "raw_text": "Python, SQL, Selenium, Jenkins, GitLab, CI/CD, Docker required.",
+        "description": "d",
+        "keywords": {"required_skills": ["python", "sql", "selenium", "jenkins",
+                                          "gitlab", "ci/cd", "docker"],
+                     "all_skills": []},
+        "years_experience": 0, "education_requirements": [],
+    }
+
+    optimized, changes = get_resume_optimizer().build_optimized_resume(resume, job)
+    added_lower = {s.lower() for s in changes["skills_added"]}
+    # Only docker is genuinely missing.
+    assert added_lower == {"docker"}, f"unexpected additions: {changes['skills_added']}"
+
+    # Scorer agrees: those compound-covered skills are matched, not missing.
+    score = get_ats_scorer().calculate_score(resume, job)
+    missing_lower = {s.lower() for s in score.missing_skills}
+    assert "sql" not in missing_lower
+    assert "jenkins" not in missing_lower
+    assert "selenium" not in missing_lower
+    assert "docker" in missing_lower
